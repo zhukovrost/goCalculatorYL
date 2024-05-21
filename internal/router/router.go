@@ -2,11 +2,14 @@ package router
 
 import (
 	"github.com/gorilla/mux"
+
 	"goCalculatorYL/internal/handler"
 	"goCalculatorYL/internal/service"
 )
 
 func SetupRouter(srv *service.Service) *mux.Router {
+	srv.Logger.Debug("Setting up router...")
+
 	r := mux.NewRouter()
 	h := handler.NewHandler(srv)
 

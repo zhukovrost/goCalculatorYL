@@ -1,17 +1,22 @@
 package service
 
 import (
+	"github.com/sirupsen/logrus"
+
 	"goCalculatorYL/internal/config"
+
 	"net/http"
 )
 
 type Service struct {
-	cfg *config.Config
+	cfg    *config.Config
+	Logger *logrus.Logger
 }
 
 func New(cfg *config.Config) *Service {
 	return &Service{
-		cfg: cfg,
+		cfg:    cfg,
+		Logger: config.LoadLogger(),
 	}
 }
 
