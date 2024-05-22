@@ -13,11 +13,11 @@ func SetupRouter(srv *service.Service) *mux.Router {
 	r := mux.NewRouter()
 	h := handlers.NewHandler(srv)
 
-	r.HandleFunc("/api/v1/calculate/", h.GetExpressionsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/expressions", h.GetExpressionsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/expressions/{id}", h.GetExpressionByIDHandler).Methods("GET")
-	r.HandleFunc("/internal/task", h.GetTaskHandler).Methods("GET")
-	r.HandleFunc("/internal/task", h.ResultHandler).Methods("POST", "GET")
+	r.HandleFunc("/api/v1/calculate", h.AddExpressionHandler).Methods("POST")
+	r.HandleFunc("/api/v1/expressions", h.GetExpressionsHandler)
+	r.HandleFunc("/api/v1/expressions/{id}", h.GetExpressionByIDHandler)
+	r.HandleFunc("/internal/task", h.GetTaskHandler)
+	r.HandleFunc("/internal/task", h.ResultHandler)
 
 	return r
 }

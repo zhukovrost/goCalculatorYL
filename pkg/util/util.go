@@ -2,7 +2,9 @@ package util
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -76,4 +78,8 @@ func ToPostfix(expression string) ([]string, error) {
 	}
 
 	return output, nil
+}
+
+func GenerateId() string {
+	return strconv.FormatInt(time.Now().UnixNano()%1000000, 10)
 }

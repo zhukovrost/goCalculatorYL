@@ -33,7 +33,16 @@ go run cmd/orchestrator/main.go
 
 ## Инструкция по использованию
 
+### 1. Добавление арифметического выражения
 
+```sh
+curl http://localhost:8080/api/v1/calculate \
+--header 'Content-Type: application/json' \
+--data '{
+  "id": "12342",
+  "expression": "2 + 2"
+}'
+```
 
 ## Структура проекта
 
