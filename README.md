@@ -1,17 +1,21 @@
-# Распределенный вычислитель арифметических выражений
+# Распределенный вычислитель арифметических выражений (оркестратор)
 
 Финальное задание по второму спринту Яндекс Лицея (GoLang)
+
+## Требуется установка агента
+
+Подробнее тут: https://github.com/zhukovrost/agentYL.git
 
 ## Установка
 
 1. Клонируйте репозиторий:
     ```sh
-    git clone https://github.com/zhukovrost/goCalculatorYL.git
+    git clone https://github.com/zhukovrost/orchestratorYL.git
     ```
 
 2. Перейдите в директорию проекта:
     ```sh
-    cd goCalculatorYL
+    cd orchestratorYL
     ```
 
 3. Установите зависимости:
@@ -24,7 +28,7 @@
 Для запуска сервера выполните:
 
 ```sh
-go run cmd/calculator/main.go
+go run cmd/orchestrator/main.go
 ```
 
 ## Инструкция по использованию
@@ -34,11 +38,13 @@ go run cmd/calculator/main.go
 ## Структура проекта
 
 ```
-mywebsite/
+orchestratorYL/
 ├── cmd/
-│   └── calculator/
+│   └── orchestrator/
 │       └── main.go
 ├── internal/
+│   ├── app/
+│   │   └── app.go
 │   ├── config/
 │   │   └── config.go
 │   ├── handler/
@@ -52,9 +58,6 @@ mywebsite/
 │   │   └── utils.go
 │   └── middleware/
 │       └── middleware.go
-├── web/
-│   ├── static/
-│   └── templates/
 ├── .gitignore
 ├── go.mod
 └── README.md

@@ -9,14 +9,14 @@ import (
 )
 
 type Service struct {
-	cfg    *config.Config
+	Cfg    *config.Config
 	Logger *logrus.Logger
 }
 
-func New(cfg *config.Config) *Service {
+func New(cfg *config.Config, logger *logrus.Logger) *Service {
 	return &Service{
-		cfg:    cfg,
-		Logger: config.LoadLogger(),
+		Cfg:    cfg,
+		Logger: logger,
 	}
 }
 
