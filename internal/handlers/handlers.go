@@ -1,4 +1,4 @@
-package handler
+package handlers
 
 import (
 	"goCalculatorYL/internal/service"
@@ -11,7 +11,7 @@ type OrchestratorHandler struct {
 }
 
 func NewHandler(srv *service.Service) *OrchestratorHandler {
-	srv.Logger.Debug("Setting up orchestrator handler...")
+	srv.Logger.Debug("Setting up orchestrator handlers...")
 	return &OrchestratorHandler{
 		srv: srv,
 	}

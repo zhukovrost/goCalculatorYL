@@ -7,17 +7,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 )
 
 type Config struct {
-	Address        string        `json:"address"`
-	Port           uint16        `json:"port"`
-	Power          uint16        `json:"power"`
-	Addition       time.Duration `json:"time_addition_ms"`
-	Subtraction    time.Duration `json:"time_subtraction_ms"`
-	Multiplication time.Duration `json:"time_multiplications_ms"`
-	Division       time.Duration `json:"time_divisions_ms"`
+	Address string `json:"address"`
+	Port    uint16 `json:"port"`
 }
 
 // GetAddress возвращает полный адрес
@@ -38,23 +32,14 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 }
 
 // LoadConfig принимает порт для сервера и длительность математических операций и возвращает конфиг
-func LoadConfig(port uint16, power, addition, subtraction, multiplication, division int) (*Config, error) {
+func LoadConfig(port uint16) (*Config, error) {
 	if port <= 0 || port > 65535 {
 		return nil, errors.New("invalid port")
 	}
 
-	if addition <= 0 || subtraction <= 0 || multiplication <= 0 || division <= 0 || power <= 0 {
-		return nil, errors.New("invalid duration")
-	}
-
 	return &Config{
-		Address:        "localhost",
-		Port:           port,
-		Power:          uint16(power),
-		Addition:       time.Millisecond * time.Duration(addition),
-		Subtraction:    time.Millisecond * time.Duration(subtraction),
-		Multiplication: time.Millisecond * time.Duration(multiplication),
-		Division:       time.Millisecond * time.Duration(division),
+		Address: "localhost",
+		Port:    port,
 	}, nil
 }
 
