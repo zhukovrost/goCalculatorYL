@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"goCalculatorYL/internal/config"
-	"net/http"
 )
 
 type Service struct {
@@ -69,8 +68,9 @@ func (s *Service) GetExpressions() []*Expression {
 }
 
 // GetExpressionByID выполняет получение списка выражений
-func (s *Service) GetExpressionByID(w http.ResponseWriter, r *http.Request) {
-
+func (s *Service) GetExpressionByID(id string) (*Expression, bool) {
+	exp, exists := s.pendingExpressions[id]
+	return exp, exists
 }
 
 // GetTask выполняет получение списка выражений

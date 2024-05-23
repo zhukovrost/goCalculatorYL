@@ -50,6 +50,14 @@ curl http://localhost:8080/api/v1/calculate \
 curl http://localhost:8080/api/v1/expressions
 ```
 
+### 3. Получение алгоритмических выражений по ID
+
+Дан пример получения выражения с ID 12342
+
+```sh
+curl http://localhost:8080/api/v1/expressions/12342
+```
+
 ## Структура проекта
 
 ```

@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"github.com/gorilla/mux"
 	"goCalculatorYL/internal/service"
 	"goCalculatorYL/pkg/util"
 	"net/http"
+	"strings"
 )
 
 type OrchestratorHandler struct {
@@ -35,6 +37,7 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	calculationRequest.ID = strings.TrimSpace(calculationRequest.ID)
 	if calculationRequest.ID == "" {
 		calculationRequest.ID = util.GenerateId()
 	}
@@ -52,11 +55,14 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 	h.srv.Logger.Debug("successful response (201)")
 }
 
-// GetExpressionsHandler выполняет получение списка выражений
+// GetExpressionsHandler выполняет получение списка всех выражений
 func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Debug("new GET request")
 	expressions := h.srv.GetExpressions()
+
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
 	if err := json.NewEncoder(w).Encode(expressions); err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error(err.Error())
@@ -65,12 +71,31 @@ func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *ht
 	h.srv.Logger.Debug("successful response (200)")
 }
 
-// GetExpressionByIDHandler выполняет получение списка выражений
+// GetExpressionByIDHandler выполняет получение выражения по ID
 func (h *OrchestratorHandler) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
+	h.srv.Logger.Println("new GET request")
+	vars := mux.Vars(r)
+	id := vars["id"]
 
+	expression, exists := h.srv.GetExpressionByID(id)
+	if !exists {
+		http.Error(w, "Expression not found", 404)
+		h.srv.Logger.Errorf("Expression not found: %s", id)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	if err := json.NewEncoder(w).Encode(expression); err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+	h.srv.Logger.Debug("successful response (200)")
 }
 
-// GetTaskHandler выполняет получение списка выражений
+// GetTaskHandler выполняет получение списка задач
 func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 }
