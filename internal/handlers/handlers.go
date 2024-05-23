@@ -20,7 +20,7 @@ func NewHandler(srv *service.Service) *OrchestratorHandler {
 
 // AddExpressionHandler выполняет добавление вычисления арифметического выражения
 func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
-	h.srv.Logger.Debug("new request")
+	h.srv.Logger.Debug("new POST request")
 
 	var calculationRequest service.CalculationRequest
 	err := json.NewDecoder(r.Body).Decode(&calculationRequest)
@@ -39,7 +39,11 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 		calculationRequest.ID = util.GenerateId()
 	}
 
-	h.srv.AddExpression(&calculationRequest)
+	if err = h.srv.AddExpression(&calculationRequest); err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
 
 	// Формирование ответа
 	w.Header().Set("Content-Type", "application/json")
@@ -50,7 +54,15 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 
 // GetExpressionsHandler выполняет получение списка выражений
 func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *http.Request) {
-
+	h.srv.Logger.Debug("new GET request")
+	expressions := h.srv.GetExpressions()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(expressions); err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+	h.srv.Logger.Debug("successful response (200)")
 }
 
 // GetExpressionByIDHandler выполняет получение списка выражений

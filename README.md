@@ -44,6 +44,12 @@ curl http://localhost:8080/api/v1/calculate \
 }'
 ```
 
+### 2. Получение всех алгоритмических выражений
+
+```sh 
+curl http://localhost:8080/api/v1/expressions
+```
+
 ## Структура проекта
 
 ```
