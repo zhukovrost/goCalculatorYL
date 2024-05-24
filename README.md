@@ -58,6 +58,23 @@ curl http://localhost:8080/api/v1/expressions
 curl http://localhost:8080/api/v1/expressions/12342
 ```
 
+### 4. Получение задачи
+
+```sh
+curl http://localhost:8080/internal/task
+```
+
+### 5. Установить результат задачи
+
+```sh
+curl http://localhost:8080/internal/task \
+--header 'Content-Type: application/json' \
+--data '{
+  "id": 0,
+  "result": 4
+}'
+```
+
 ## Структура проекта
 
 ```
@@ -77,10 +94,8 @@ orchestratorYL/
 │   └── service/
 │       └── service.go
 ├── pkg/
-│   ├── utils/
-│   │   └── utils.go
-│   └── middleware/
-│       └── middleware.go
+│   └── utils/
+│       └── utils.go
 ├── .gitignore
 ├── go.mod
 └── README.md

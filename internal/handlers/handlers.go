@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/gorilla/mux"
 	"goCalculatorYL/internal/service"
 	"goCalculatorYL/pkg/util"
@@ -97,10 +98,60 @@ func (h *OrchestratorHandler) GetExpressionByIDHandler(w http.ResponseWriter, r 
 
 // GetTaskHandler выполняет получение списка задач
 func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
+	task, err := h.srv.GetTask()
+	if err != nil {
+		switch {
+		case errors.Is(err, service.NoTaskError):
+			http.Error(w, err.Error(), 404)
+			return
+		default:
+			http.Error(w, err.Error(), 505)
+			h.srv.Logger.Error(err.Error())
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
+	resp, err := task.GetJSONResponse()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	_, err = w.Write(resp)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error("failed to write response: " + err.Error())
+	}
+
+	h.srv.Logger.Debugf("successful response: the task %d has been taken for calculation (200)", task.Id)
 }
 
-// ResultHandler выполняет прием результата обработки данных
-func (h *OrchestratorHandler) ResultHandler(w http.ResponseWriter, r *http.Request) {
+type calculationResult struct {
+	Id     int     `json:"id"`
+	Result float64 `json:"result"`
+}
 
+// SetResultHandler выполняет прием результата обработки данных
+func (h *OrchestratorHandler) SetResultHandler(w http.ResponseWriter, r *http.Request) {
+	h.srv.Logger.Debug("new POST request")
+
+	var result calculationResult
+	err := json.NewDecoder(r.Body).Decode(&result)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	if err = h.srv.SetResult(result.Id, result.Result); err != nil {
+		http.Error(w, err.Error(), 404)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	w.WriteHeader(200)
+	h.srv.Logger.Debug("successful response (200)")
 }

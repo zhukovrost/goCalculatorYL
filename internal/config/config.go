@@ -1,17 +1,20 @@
 package config
 
 import (
-	"github.com/sirupsen/logrus"
-
 	"errors"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"os"
 	"strings"
 )
 
 type Config struct {
-	Address string `json:"address"`
-	Port    uint16 `json:"port"`
+	Address        string `json:"address"`
+	Port           uint16 `json:"port"`
+	Addition       uint
+	Subtraction    uint
+	Multiplication uint
+	Division       uint
 }
 
 // GetAddress возвращает полный адрес
@@ -32,14 +35,18 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 }
 
 // LoadConfig принимает порт для сервера и длительность математических операций и возвращает конфиг
-func LoadConfig(port uint16) (*Config, error) {
+func LoadConfig(port uint16, addition, subtraction, multiplication, division uint) (*Config, error) {
 	if port <= 0 || port > 65535 {
 		return nil, errors.New("invalid port")
 	}
 
 	return &Config{
-		Address: "localhost",
-		Port:    port,
+		Address:        "localhost",
+		Port:           port,
+		Addition:       addition,
+		Subtraction:    subtraction,
+		Multiplication: multiplication,
+		Division:       division,
 	}, nil
 }
 
