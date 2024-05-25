@@ -17,8 +17,14 @@
     ```sh
     cd orchestratorYL
     ```
+   
+3. **При необходимости** установите окружение (Linux):
 
-3. Установите зависимости:
+   ```sh 
+   export PATH=$PATH:/usr/local/go/bin
+   ```
+
+4. Установите зависимости:
     ```sh
     go mod tidy
     ```
