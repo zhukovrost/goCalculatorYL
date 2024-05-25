@@ -119,6 +119,7 @@ func (s *Service) generateTasks(expressionId string) error {
 	postfix, err := util.ToPostfix(exp.Expression)
 
 	if err != nil {
+		exp.Status = "invalid"
 		return err
 	}
 
@@ -129,6 +130,7 @@ func (s *Service) generateTasks(expressionId string) error {
 			stack = append(stack, operand)
 		} else {
 			if len(stack) < 2 {
+				exp.Status = "invalid"
 				return fmt.Errorf("invalid postfix expression")
 			}
 
@@ -161,6 +163,7 @@ func (s *Service) generateTasks(expressionId string) error {
 	}
 
 	if len(stack) != 1 {
+		exp.Status = "invalid"
 		return fmt.Errorf("invalid postfix expression")
 	}
 	s.Logger.Debugf("successfully created %d tasks", cnt)
@@ -233,23 +236,27 @@ func (s *Service) GetTask() (*Task, error) {
 
 	exp := s.expressions[task.expressionId]
 
-	if isTask(task.Arg1) && !task.Arg1.(*Task).isDone {
+	if exp.IsValid() && isTask(task.Arg1) && !task.Arg1.(*Task).isDone {
 		return nil, NoTaskError
 	}
 
-	if isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
+	if exp.IsValid() && isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
 		return nil, NoTaskError
 	}
 
 	defer func() { s.lastTask++ }()
 
 	if !exp.IsValid() {
+		s.clearTasks(task, true)
 		return s.GetTask()
 	}
 
-	if isTask(task.Arg2) && task.Arg2.(*Task).result == 0 && task.Operation == "/" {
+	val, ok := task.Arg2.(float64)
+
+	if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || ok && val == 0) && task.Operation == "/" {
 		exp.Status = "invalid"
-		s.Logger.Errorf("expression %v is invalid", exp.ID)
+		s.Logger.Errorf("expression %v is invalid: division by zero", exp.ID)
+		s.clearTasks(task, true)
 		return s.GetTask()
 	}
 
@@ -268,10 +275,11 @@ func (s *Service) SetResult(id int, result float64) error {
 	task.isDone = true
 
 	exp := s.expressions[task.expressionId]
+	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
+
 	if lastTaskId := exp.lastTask.Id; lastTaskId == task.Id {
 		s.completeExpression(exp)
 	}
-	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
 	return nil
 }
 
