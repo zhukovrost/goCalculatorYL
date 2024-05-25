@@ -79,29 +79,35 @@ func (s *Service) AddExpression(req *CalculationRequest) error {
 	}
 
 	if s.taskCounter > 0 {
-		exp.lastTask = s.tasks[s.taskCounter-1]
+		exp.lastTask = s.tasks[s.taskCounter]
 	}
 
 	return nil
 }
 
-func (s *Service) completeExpression(exp *Expression, result float64) {
-	exp.Result = result
+func (s *Service) completeExpression(exp *Expression) {
+	exp.Result = exp.lastTask.result
 	exp.Status = "done"
-	s.Logger.Infof("expression (id: %s) done. result: %f", exp.ID, result)
-	s.clearTasks(exp.lastTask.Id, exp.ID)
+	s.clearTasks(exp.lastTask, true)
+	exp.lastTask = nil
+	s.Logger.Infof("expression (id: %s) done. result: %f", exp.ID, exp.Result)
 }
 
-func (s *Service) clearTasks(lastTaskId int, expressionId string) {
-	s.Logger.Debug("clearing tasks")
-	for id, task := range s.tasks {
-		if task.expressionId == expressionId {
-			delete(s.tasks, id)
-			s.Logger.Debugf("tasks %d has been deleted", id)
-		}
-		if id == lastTaskId {
-			break
-		}
+func (s *Service) clearTasks(lastTask *Task, deleteCurrent bool) {
+	if lastTask == nil {
+		return
+	}
+	if isTask(lastTask.Arg1) {
+		s.clearTasks(lastTask.Arg1.(*Task), true)
+		lastTask.Arg1 = nil
+	}
+	if isTask(lastTask.Arg1) {
+		s.clearTasks(lastTask.Arg1.(*Task), true)
+		lastTask.Arg2 = nil
+	}
+	if deleteCurrent {
+		delete(s.tasks, lastTask.Id)
+		s.Logger.Debugf("task %d has been deleted", lastTask.Id)
 	}
 }
 
@@ -219,50 +225,35 @@ func (s *Service) GetTask() (*Task, error) {
 		}
 		return nil, NoTaskError
 	}
+
 	task, exists := s.tasks[s.lastTask]
 	if !exists {
 		return nil, NoTaskError
 	}
 
 	exp := s.expressions[task.expressionId]
-	if !exp.IsValid() {
-		task.isDone = true
-		if exp.lastTask.Id == task.Id {
-			s.clearTasks(exp.lastTask.Id, exp.ID)
-		}
-		s.lastTask++
-		return s.GetTask()
-	}
 
 	if isTask(task.Arg1) && !task.Arg1.(*Task).isDone {
 		return nil, NoTaskError
 	}
 
-	if isTask(task.Arg2) {
-		if !task.Arg2.(*Task).isDone {
-			return nil, NoTaskError
-		} else if task.Arg2.(*Task).result == 0 {
-			exp.Status = "invalid"
-			s.Logger.Errorf("expression %v is invalid", exp.ID)
-			task.isDone = true
-			if exp.lastTask.Id == task.Id {
-				s.clearTasks(exp.lastTask.Id, exp.ID)
-			}
-			s.lastTask++
-			return s.GetTask()
-		}
+	if isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
+		return nil, NoTaskError
+	}
+
+	defer func() { s.lastTask++ }()
+
+	if !exp.IsValid() {
+		return s.GetTask()
+	}
+
+	if isTask(task.Arg2) && task.Arg2.(*Task).result == 0 && task.Operation == "/" {
+		exp.Status = "invalid"
+		s.Logger.Errorf("expression %v is invalid", exp.ID)
+		return s.GetTask()
 	}
 
 	exp.Status = "calculating"
-	s.lastTask++
-
-	if isTask(task.Arg1) {
-		s.clearTasks(task.Arg1.(*Task).Id, exp.ID)
-	}
-
-	if isTask(task.Arg2) {
-		s.clearTasks(task.Arg2.(*Task).Id, exp.ID)
-	}
 
 	return task, nil
 }
@@ -275,11 +266,12 @@ func (s *Service) SetResult(id int, result float64) error {
 	}
 	task.result = result
 	task.isDone = true
-	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
+
 	exp := s.expressions[task.expressionId]
-	if lastTask := exp.lastTask; lastTask == task {
-		s.completeExpression(exp, result)
+	if lastTaskId := exp.lastTask.Id; lastTaskId == task.Id {
+		s.completeExpression(exp)
 	}
+	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
 	return nil
 }
 
@@ -295,7 +287,7 @@ type TaskResponse struct {
 	OperationTime uint    `json:"operation_time"`
 }
 
-func fillResponse(task *Task) *TaskResponse {
+func (s *Service) fillResponse(task *Task) *TaskResponse {
 	var arg1, arg2 float64
 
 	if isTask(task.Arg1) {
@@ -305,10 +297,12 @@ func fillResponse(task *Task) *TaskResponse {
 	}
 
 	if isTask(task.Arg2) {
-		arg1 = task.Arg2.(*Task).result
+		arg2 = task.Arg2.(*Task).result
 	} else {
-		arg1 = task.Arg2.(float64)
+		arg2 = task.Arg2.(float64)
 	}
+
+	s.clearTasks(task, false)
 
 	return &TaskResponse{
 		Id:            task.Id,
@@ -319,9 +313,9 @@ func fillResponse(task *Task) *TaskResponse {
 	}
 }
 
-func (t *Task) GetJSONResponse() ([]byte, error) {
+func (s *Service) GetJSONResponse(t *Task) ([]byte, error) {
 	resp := &Response{
-		Task: fillResponse(t),
+		Task: s.fillResponse(t),
 	}
 	jsonData, err := json.Marshal(resp)
 	if err != nil {

@@ -113,7 +113,7 @@ func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
-	resp, err := task.GetJSONResponse()
+	resp, err := h.srv.GetJSONResponse(task)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error(err.Error())
