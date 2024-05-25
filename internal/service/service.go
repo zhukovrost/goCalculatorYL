@@ -305,9 +305,9 @@ func fillResponse(task *Task) *TaskResponse {
 	}
 
 	if isTask(task.Arg2) {
-		arg1 = task.Arg2.(*Task).result
+		arg2 = task.Arg2.(*Task).result
 	} else {
-		arg1 = task.Arg2.(float64)
+		arg2 = task.Arg2.(float64)
 	}
 
 	return &TaskResponse{
