@@ -19,8 +19,8 @@ type Service struct {
 	Logger      *logrus.Logger
 	expressions map[string]*Expression
 	tasks       map[int]*Task
-	taskCounter int
-	lastTask    int
+	taskCounter int // Переменная, для хранения id каждого новой задачи
+	lastTask    int // Переменная, для хранения id последней выполненной задачи
 }
 
 func NewService(cfg *config.Config, logger *logrus.Logger) *Service {
@@ -33,32 +33,35 @@ func NewService(cfg *config.Config, logger *logrus.Logger) *Service {
 	}
 }
 
+// enqueueExpression добавляет новое выражение в очередь на выполнение
 func (s *Service) enqueueExpression(exp *Expression) error {
-	_, exists := s.expressions[exp.ID]
+	_, exists := s.expressions[exp.Id]
 	if exists {
-		return fmt.Errorf("expression %s already exists", exp.ID)
+		return fmt.Errorf("expression %s already exists", exp.Id)
 	}
-	s.expressions[exp.ID] = exp
+	s.expressions[exp.Id] = exp
 	return nil
 }
 
-type CalculationRequest struct {
-	ID         string `json:"id"`
+// NewExpressionRequest является входными данными при приёме нового выражения
+type NewExpressionRequest struct {
+	Id         string `json:"id"`
 	Expression string `json:"expression"`
 }
 
+// Expression является выражением, которое нужно вычислить
 type Expression struct {
-	*CalculationRequest
+	*NewExpressionRequest
 	Result   float64 `json:"result"`
 	Status   string  `json:"status"`
 	lastTask *Task
 }
 
-func NewExpression(exp *CalculationRequest) *Expression {
+func NewExpression(exp *NewExpressionRequest) *Expression {
 	return &Expression{
-		CalculationRequest: exp,
-		Result:             0,
-		Status:             "pending",
+		NewExpressionRequest: exp,
+		Result:               0,
+		Status:               "pending",
 	}
 }
 
@@ -67,14 +70,15 @@ func (e *Expression) IsValid() bool {
 }
 
 // AddExpression выполняет добавление вычисления арифметического выражения
-func (s *Service) AddExpression(req *CalculationRequest) error {
+func (s *Service) AddExpression(req *NewExpressionRequest) error {
 	exp := NewExpression(req)
 	err := s.enqueueExpression(exp)
 	if err != nil {
 		return err
 	}
-	s.Logger.Infof("new expression (id: %s): %s", exp.ID, exp.Expression)
-	if err := s.generateTasks(exp.ID); err != nil {
+
+	s.Logger.Infof("new expression (id: %s): %s", exp.Id, exp.Expression)
+	if err := s.generateTasks(exp.Id); err != nil {
 		return err
 	}
 
@@ -85,14 +89,16 @@ func (s *Service) AddExpression(req *CalculationRequest) error {
 	return nil
 }
 
+// completeExpression выполняет всю логику при завершении вычисления выражения
 func (s *Service) completeExpression(exp *Expression) {
 	exp.Result = exp.lastTask.result
 	exp.Status = "done"
 	s.clearTasks(exp.lastTask, true)
 	exp.lastTask = nil
-	s.Logger.Infof("expression (id: %s) done. result: %f", exp.ID, exp.Result)
+	s.Logger.Infof("expression (id: %s) done. result: %f", exp.Id, exp.Result)
 }
 
+// clearTasks удаляет из памяти задачи, которые требуются для выполнения данной
 func (s *Service) clearTasks(lastTask *Task, deleteCurrent bool) {
 	if lastTask == nil {
 		return
@@ -111,12 +117,13 @@ func (s *Service) clearTasks(lastTask *Task, deleteCurrent bool) {
 	}
 }
 
+// generateTasks преобразует выражение в ряд задач
 func (s *Service) generateTasks(expressionId string) error {
 	s.Logger.Debug("generating tasks")
 
-	var cnt uint
+	var cnt uint // подсчёт созданных задач
 	exp := s.expressions[expressionId]
-	postfix, err := util.ToPostfix(exp.Expression)
+	postfix, err := util.ToPostfix(exp.Expression) // получение постфикса (обратная польская запись)
 
 	if err != nil {
 		exp.Status = "invalid"
@@ -124,7 +131,7 @@ func (s *Service) generateTasks(expressionId string) error {
 	}
 
 	//обработка постфикса
-	stack := make([]interface{}, 0) // stack to hold operands and task references
+	stack := make([]interface{}, 0) // стек для хранения операндов и ссылок на задачи
 	for _, token := range postfix {
 		if operand, err := strconv.ParseFloat(token, 64); err == nil {
 			stack = append(stack, operand)
@@ -134,8 +141,8 @@ func (s *Service) generateTasks(expressionId string) error {
 				return fmt.Errorf("invalid postfix expression")
 			}
 
-			b := stack[len(stack)-1]
 			a := stack[len(stack)-2]
+			b := stack[len(stack)-1]
 			stack = stack[:len(stack)-2]
 			cnt++
 
@@ -150,7 +157,7 @@ func (s *Service) generateTasks(expressionId string) error {
 			case "/":
 				if !isTask(b) && b.(float64) == 0 {
 					exp.Status = "invalid"
-					s.Logger.Errorf("expression %v is invalid", exp.ID)
+					s.Logger.Errorf("expression %v is invalid", exp.Id)
 					return fmt.Errorf("division by zero")
 				}
 				task = s.newTask(a, b, "/", s.Cfg.Division, expressionId)
@@ -180,12 +187,13 @@ func (s *Service) GetExpressions() []*Expression {
 	return res
 }
 
-// GetExpressionByID выполняет получение списка выражений
-func (s *Service) GetExpressionByID(id string) (*Expression, bool) {
+// GetExpressionById выполняет получение выражения по Id
+func (s *Service) GetExpressionById(id string) (*Expression, bool) {
 	exp, exists := s.expressions[id]
 	return exp, exists
 }
 
+// Task является структурой для задач
 type Task struct {
 	Id            int
 	Arg1          interface{}
@@ -218,17 +226,8 @@ func isTask(arg interface{}) bool {
 	return ok
 }
 
-// GetTask выполняет получение списка выражений
+// GetTask выполняет получение задачи, как правило, самой старой
 func (s *Service) GetTask() (*Task, error) {
-	if s.lastTask == 0 {
-		task, exists := s.tasks[s.lastTask]
-		if exists {
-			s.lastTask++
-			return task, nil
-		}
-		return nil, NoTaskError
-	}
-
 	task, exists := s.tasks[s.lastTask]
 	if !exists {
 		return nil, NoTaskError
@@ -236,26 +235,27 @@ func (s *Service) GetTask() (*Task, error) {
 
 	exp := s.expressions[task.expressionId]
 
+	// проверка выполнены ли задачи, требуемые для выполнения текущей
 	if exp.IsValid() && isTask(task.Arg1) && !task.Arg1.(*Task).isDone {
 		return nil, NoTaskError
 	}
-
 	if exp.IsValid() && isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
 		return nil, NoTaskError
 	}
 
 	defer func() { s.lastTask++ }()
 
+	// если выражение невалидное, очистить все задачи
 	if !exp.IsValid() {
 		s.clearTasks(task, true)
 		return s.GetTask()
 	}
 
-	val, ok := task.Arg2.(float64)
-
-	if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || ok && val == 0) && task.Operation == "/" {
+	// обработка деления на ноль
+	val, isFloat := task.Arg2.(float64)
+	if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || isFloat && val == 0) && task.Operation == "/" {
 		exp.Status = "invalid"
-		s.Logger.Errorf("expression %v is invalid: division by zero", exp.ID)
+		s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
 		s.clearTasks(task, true)
 		return s.GetTask()
 	}
@@ -265,7 +265,7 @@ func (s *Service) GetTask() (*Task, error) {
 	return task, nil
 }
 
-// SetResult выполняет прием результата обработки данных
+// SetResult выполняет прием результата обработки задачи
 func (s *Service) SetResult(id int, result float64) error {
 	task, exists := s.tasks[id]
 	if !exists {
@@ -277,16 +277,19 @@ func (s *Service) SetResult(id int, result float64) error {
 	exp := s.expressions[task.expressionId]
 	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
 
+	// проверка на выполнение всего выражения
 	if lastTaskId := exp.lastTask.Id; lastTaskId == task.Id {
 		s.completeExpression(exp)
 	}
 	return nil
 }
 
-type Response struct {
+// GetTaskResponse является основной структурой ответа для получения задачи
+type GetTaskResponse struct {
 	Task *TaskResponse `json:"task"`
 }
 
+// TaskResponse является самим ответом (задачей)
 type TaskResponse struct {
 	Id            int     `json:"id"`
 	Arg1          float64 `json:"arg1"`
@@ -295,6 +298,7 @@ type TaskResponse struct {
 	OperationTime uint    `json:"operation_time"`
 }
 
+// fillResponse обрабатывает задачу, которую нужно выдать как ответ
 func (s *Service) fillResponse(task *Task) *TaskResponse {
 	var arg1, arg2 float64
 
@@ -321,8 +325,9 @@ func (s *Service) fillResponse(task *Task) *TaskResponse {
 	}
 }
 
+// GetJSONResponse возвращается json получаемой задачи
 func (s *Service) GetJSONResponse(t *Task) ([]byte, error) {
-	resp := &Response{
+	resp := &GetTaskResponse{
 		Task: s.fillResponse(t),
 	}
 	jsonData, err := json.Marshal(resp)

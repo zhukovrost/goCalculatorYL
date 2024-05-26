@@ -25,7 +25,7 @@ func NewHandler(srv *service.Service) *OrchestratorHandler {
 func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Debug("new POST request")
 
-	var calculationRequest service.CalculationRequest
+	var calculationRequest service.NewExpressionRequest
 	err := json.NewDecoder(r.Body).Decode(&calculationRequest)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -38,9 +38,9 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	calculationRequest.ID = strings.TrimSpace(calculationRequest.ID)
-	if calculationRequest.ID == "" {
-		calculationRequest.ID = util.GenerateId()
+	calculationRequest.Id = strings.TrimSpace(calculationRequest.Id)
+	if calculationRequest.Id == "" {
+		calculationRequest.Id = util.GenerateId()
 	}
 
 	if err = h.srv.AddExpression(&calculationRequest); err != nil {
@@ -72,13 +72,13 @@ func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *ht
 	h.srv.Logger.Debug("successful response (200)")
 }
 
-// GetExpressionByIDHandler выполняет получение выражения по ID
-func (h *OrchestratorHandler) GetExpressionByIDHandler(w http.ResponseWriter, r *http.Request) {
+// GetExpressionByIdHandler выполняет получение выражения по Id
+func (h *OrchestratorHandler) GetExpressionByIdHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Println("new GET request")
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	expression, exists := h.srv.GetExpressionByID(id)
+	expression, exists := h.srv.GetExpressionById(id)
 	if !exists {
 		http.Error(w, "Expression not found", 404)
 		h.srv.Logger.Errorf("Expression not found: %s", id)
@@ -96,7 +96,7 @@ func (h *OrchestratorHandler) GetExpressionByIDHandler(w http.ResponseWriter, r 
 	h.srv.Logger.Debug("successful response (200)")
 }
 
-// GetTaskHandler выполняет получение списка задач
+// GetTaskHandler выполняет получение задачи
 func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Request) {
 	task, err := h.srv.GetTask()
 	if err != nil {
@@ -129,12 +129,13 @@ func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Requ
 	h.srv.Logger.Debugf("successful response: the task %d has been taken for calculation (200)", task.Id)
 }
 
+// calculationResult является структурой получения результата вычисления задачи
 type calculationResult struct {
 	Id     int     `json:"id"`
 	Result float64 `json:"result"`
 }
 
-// SetResultHandler выполняет прием результата обработки данных
+// SetResultHandler выполняет прием результата обработки задачи
 func (h *OrchestratorHandler) SetResultHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Debug("new POST request")
 

@@ -50,10 +50,14 @@ func LoadConfig(port uint16, addition, subtraction, multiplication, division uin
 	}, nil
 }
 
-func LoadLogger() *logrus.Logger {
+func LoadLogger(debugLevel bool) *logrus.Logger {
 	log := logrus.New()
 	log.SetFormatter(&CustomFormatter{})
 	log.SetOutput(os.Stdout)
-	log.SetLevel(logrus.DebugLevel)
+	if debugLevel {
+		log.SetLevel(logrus.DebugLevel)
+	} else {
+		log.SetLevel(logrus.InfoLevel)
+	}
 	return log
 }
