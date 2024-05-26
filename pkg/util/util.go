@@ -29,9 +29,9 @@ func ToPostfix(expression string) ([]string, error) {
 	var output []string
 	var numberBuffer strings.Builder
 
-	for _, token := range expression {
+	for i, token := range expression {
 		switch {
-		case unicode.IsDigit(token):
+		case unicode.IsDigit(token) || token == '.': // Support for decimal numbers
 			numberBuffer.WriteRune(token)
 		case token == '(':
 			if numberBuffer.Len() > 0 {
@@ -62,6 +62,13 @@ func ToPostfix(expression string) ([]string, error) {
 				stack = stack[:len(stack)-1]
 			}
 			stack = append(stack, token)
+		case unicode.IsSpace(token):
+			if numberBuffer.Len() > 0 && i > 0 && unicode.IsDigit(rune(expression[i-1])) {
+				output = append(output, numberBuffer.String())
+				numberBuffer.Reset()
+			}
+		default:
+			return nil, fmt.Errorf("invalid character: %c", token)
 		}
 	}
 

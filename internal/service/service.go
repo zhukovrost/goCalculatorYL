@@ -121,7 +121,6 @@ func (s *Service) clearTasks(lastTask *Task, deleteCurrent bool) {
 func (s *Service) generateTasks(expressionId string) error {
 	s.Logger.Debug("generating tasks")
 
-	var cnt uint // подсчёт созданных задач
 	exp := s.expressions[expressionId]
 	postfix, err := util.ToPostfix(exp.Expression) // получение постфикса (обратная польская запись)
 
@@ -130,7 +129,21 @@ func (s *Service) generateTasks(expressionId string) error {
 		return err
 	}
 
-	//обработка постфикса
+	// Если выражение состоит из одного числа, сразу записываем результат
+	if len(postfix) == 1 {
+		if operand, err := strconv.ParseFloat(postfix[0], 64); err == nil {
+			exp.Result = operand
+			exp.Status = "done"
+			s.Logger.Infof("no tasks needed for %s. it is done.", exp.Id)
+			return nil
+		} else {
+			exp.Status = "invalid"
+			return fmt.Errorf("invalid number format")
+		}
+	}
+
+	// Обработка постфикса
+	var cnt uint                    // подсчёт созданных задач
 	stack := make([]interface{}, 0) // стек для хранения операндов и ссылок на задачи
 	for _, token := range postfix {
 		if operand, err := strconv.ParseFloat(token, 64); err == nil {
@@ -173,6 +186,7 @@ func (s *Service) generateTasks(expressionId string) error {
 		exp.Status = "invalid"
 		return fmt.Errorf("invalid postfix expression")
 	}
+
 	s.Logger.Debugf("successfully created %d tasks", cnt)
 	return nil
 }
@@ -332,7 +346,7 @@ func (s *Service) GetJSONResponse(t *Task) ([]byte, error) {
 	}
 	jsonData, err := json.Marshal(resp)
 	if err != nil {
-		return nil, fmt.Errorf("не получилось получить json")
+		return nil, fmt.Errorf("invalid json")
 	}
 	return jsonData, nil
 }
