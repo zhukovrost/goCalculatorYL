@@ -8,19 +8,54 @@ import (
 	"goCalculatorYL/internal/config"
 	"goCalculatorYL/pkg/util"
 	"strconv"
+	"sync"
 )
 
 var (
 	NoTaskError = errors.New("no task")
 )
 
+type taskQueue struct {
+	tasks       map[int]*Task
+	taskCounter int // Переменная, для хранения id каждого новой задачи
+	lastTask    int // Переменная, для хранения id последней выполненной задачи
+	mu          *sync.RWMutex
+}
+
+func newTaskQueue() *taskQueue {
+	return &taskQueue{
+		tasks:       make(map[int]*Task),
+		taskCounter: -1,
+		lastTask:    0,
+		mu:          &sync.RWMutex{},
+	}
+}
+
+func (q *taskQueue) get(id int) (*Task, bool) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	task, ok := q.tasks[id]
+	return task, ok
+}
+
+func (q *taskQueue) delete(id int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.tasks, id)
+}
+
+func (q *taskQueue) getLast() (*Task, bool) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	task, ok := q.tasks[q.lastTask]
+	return task, ok
+}
+
 type Service struct {
 	Cfg         *config.Config
 	Logger      *logrus.Logger
 	expressions map[string]*Expression
-	tasks       map[int]*Task
-	taskCounter int // Переменная, для хранения id каждого новой задачи
-	lastTask    int // Переменная, для хранения id последней выполненной задачи
+	tasks       *taskQueue
 }
 
 func NewService(cfg *config.Config, logger *logrus.Logger) *Service {
@@ -28,8 +63,7 @@ func NewService(cfg *config.Config, logger *logrus.Logger) *Service {
 		Cfg:         cfg,
 		Logger:      logger,
 		expressions: make(map[string]*Expression),
-		tasks:       make(map[int]*Task),
-		taskCounter: -1,
+		tasks:       newTaskQueue(),
 	}
 }
 
@@ -82,8 +116,8 @@ func (s *Service) AddExpression(req *NewExpressionRequest) error {
 		return err
 	}
 
-	if s.taskCounter > 0 {
-		exp.lastTask = s.tasks[s.taskCounter]
+	if s.tasks.taskCounter > 0 {
+		exp.lastTask, _ = s.tasks.get(s.tasks.taskCounter)
 	}
 
 	return nil
@@ -112,7 +146,7 @@ func (s *Service) clearTasks(lastTask *Task, deleteCurrent bool) {
 		lastTask.Arg2 = nil
 	}
 	if deleteCurrent {
-		delete(s.tasks, lastTask.Id)
+		s.tasks.delete(lastTask.Id)
 		s.Logger.Debugf("task %d has been deleted", lastTask.Id)
 	}
 }
@@ -220,9 +254,12 @@ type Task struct {
 }
 
 func (s *Service) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *Task {
-	s.taskCounter++
+	s.tasks.mu.Lock()
+	defer s.tasks.mu.Unlock()
+
+	s.tasks.taskCounter++
 	task := &Task{
-		Id:            s.taskCounter,
+		Id:            s.tasks.taskCounter,
 		Arg1:          arg1,
 		Arg2:          arg2,
 		Operation:     operation,
@@ -231,7 +268,7 @@ func (s *Service) newTask(arg1, arg2 interface{}, operation string, operationTim
 		result:        0,
 		isDone:        false,
 	}
-	s.tasks[task.Id] = task
+	s.tasks.tasks[task.Id] = task
 	return task
 }
 
@@ -242,7 +279,7 @@ func isTask(arg interface{}) bool {
 
 // GetTask выполняет получение задачи, как правило, самой старой
 func (s *Service) GetTask() (*Task, error) {
-	task, exists := s.tasks[s.lastTask]
+	task, exists := s.tasks.getLast()
 	if !exists {
 		return nil, NoTaskError
 	}
@@ -257,7 +294,11 @@ func (s *Service) GetTask() (*Task, error) {
 		return nil, NoTaskError
 	}
 
-	defer func() { s.lastTask++ }()
+	defer func() {
+		s.tasks.mu.Lock()
+		defer s.tasks.mu.Unlock()
+		s.tasks.lastTask++
+	}()
 
 	// если выражение невалидное, очистить все задачи
 	if !exp.IsValid() {
@@ -281,7 +322,7 @@ func (s *Service) GetTask() (*Task, error) {
 
 // SetResult выполняет прием результата обработки задачи
 func (s *Service) SetResult(id int, result float64) error {
-	task, exists := s.tasks[id]
+	task, exists := s.tasks.get(id)
 	if !exists {
 		return fmt.Errorf("expression %d not found. probably, the expression is invalid", id)
 	}
