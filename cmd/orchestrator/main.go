@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
-	"goCalculatorYL/internal/app"
-	"goCalculatorYL/internal/config"
-	"goCalculatorYL/internal/service"
+	"orchestrator/internal/app"
+	"orchestrator/internal/config"
+	"orchestrator/internal/service"
 )
 
 func main() {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"goCalculatorYL/internal/config"
-	"goCalculatorYL/pkg/util"
+	"orchestrator/internal/config"
+	"orchestrator/pkg/util"
 	"strconv"
 	"sync"
 )
@@ -15,41 +15,7 @@ var (
 	NoTaskError = errors.New("no task")
 )
 
-type taskQueue struct {
-	tasks       map[int]*Task
-	taskCounter int // Переменная, для хранения id каждого новой задачи
-	lastTask    int // Переменная, для хранения id последней выполненной задачи
-	mu          *sync.RWMutex
-}
-
-func newTaskQueue() *taskQueue {
-	return &taskQueue{
-		tasks:       make(map[int]*Task),
-		taskCounter: -1,
-		lastTask:    0,
-		mu:          &sync.RWMutex{},
-	}
-}
-
-func (q *taskQueue) get(id int) (*Task, bool) {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-	task, ok := q.tasks[id]
-	return task, ok
-}
-
-func (q *taskQueue) delete(id int) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	delete(q.tasks, id)
-}
-
-func (q *taskQueue) getLast() (*Task, bool) {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-	task, ok := q.tasks[q.lastTask]
-	return task, ok
-}
+// ===== Service block =====
 
 type Service struct {
 	Cfg         *config.Config
@@ -67,15 +33,7 @@ func NewService(cfg *config.Config, logger *logrus.Logger) *Service {
 	}
 }
 
-// enqueueExpression добавляет новое выражение в очередь на выполнение
-func (s *Service) enqueueExpression(exp *Expression) error {
-	_, exists := s.expressions[exp.Id]
-	if exists {
-		return fmt.Errorf("expression %s already exists", exp.Id)
-	}
-	s.expressions[exp.Id] = exp
-	return nil
-}
+// ===== Expressions block =====
 
 // NewExpressionRequest является входными данными при приёме нового выражения
 type NewExpressionRequest struct {
@@ -101,6 +59,32 @@ func NewExpression(exp *NewExpressionRequest) *Expression {
 
 func (e *Expression) IsValid() bool {
 	return e.Status != "invalid"
+}
+
+// GetExpressions выполняет получение списка выражений
+func (s *Service) GetExpressions() []*Expression {
+	s.Logger.Debugf("get all expressions (%d items)", len(s.expressions))
+	var res []*Expression
+	for _, exp := range s.expressions {
+		res = append(res, exp)
+	}
+	return res
+}
+
+// GetExpressionById выполняет получение выражения по Id
+func (s *Service) GetExpressionById(id string) (*Expression, bool) {
+	exp, exists := s.expressions[id]
+	return exp, exists
+}
+
+// enqueueExpression добавляет новое выражение в очередь на выполнение
+func (s *Service) enqueueExpression(exp *Expression) error {
+	_, exists := s.expressions[exp.Id]
+	if exists {
+		return fmt.Errorf("expression %s already exists", exp.Id)
+	}
+	s.expressions[exp.Id] = exp
+	return nil
 }
 
 // AddExpression выполняет добавление вычисления арифметического выражения
@@ -130,6 +114,46 @@ func (s *Service) completeExpression(exp *Expression) {
 	s.clearTasks(exp.lastTask, true)
 	exp.lastTask = nil
 	s.Logger.Infof("expression (id: %s) done. result: %f", exp.Id, exp.Result)
+}
+
+// ===== Tasks Block =====
+
+// Task является структурой для задач
+type Task struct {
+	Id            int
+	Arg1          interface{}
+	Arg2          interface{}
+	Operation     string
+	OperationTime uint
+	result        float64
+	expressionId  string
+	isDone        bool
+	isCalculating bool
+}
+
+func (s *Service) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *Task {
+	s.tasks.mu.Lock()
+	defer s.tasks.mu.Unlock()
+
+	s.tasks.taskCounter++
+	task := &Task{
+		Id:            s.tasks.taskCounter,
+		Arg1:          arg1,
+		Arg2:          arg2,
+		Operation:     operation,
+		OperationTime: operationTime,
+		expressionId:  expressionId,
+		result:        0,
+		isDone:        false,
+		isCalculating: false,
+	}
+	s.tasks.tasks[task.Id] = task
+	return task
+}
+
+func isTask(arg interface{}) bool {
+	_, ok := arg.(*Task)
+	return ok
 }
 
 // clearTasks удаляет из памяти задачи, которые требуются для выполнения данной
@@ -221,103 +245,61 @@ func (s *Service) generateTasks(expressionId string) error {
 		return fmt.Errorf("invalid postfix expression")
 	}
 
-	s.Logger.Debugf("successfully created %d tasks", cnt)
+	s.Logger.Infof("successfully created %d tasks", cnt)
 	return nil
-}
-
-// GetExpressions выполняет получение списка выражений
-func (s *Service) GetExpressions() []*Expression {
-	s.Logger.Debugf("get all expressions (%d items)", len(s.expressions))
-	var res []*Expression
-	for _, exp := range s.expressions {
-		res = append(res, exp)
-	}
-	return res
-}
-
-// GetExpressionById выполняет получение выражения по Id
-func (s *Service) GetExpressionById(id string) (*Expression, bool) {
-	exp, exists := s.expressions[id]
-	return exp, exists
-}
-
-// Task является структурой для задач
-type Task struct {
-	Id            int
-	Arg1          interface{}
-	Arg2          interface{}
-	Operation     string
-	OperationTime uint
-	result        float64
-	expressionId  string
-	isDone        bool
-}
-
-func (s *Service) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *Task {
-	s.tasks.mu.Lock()
-	defer s.tasks.mu.Unlock()
-
-	s.tasks.taskCounter++
-	task := &Task{
-		Id:            s.tasks.taskCounter,
-		Arg1:          arg1,
-		Arg2:          arg2,
-		Operation:     operation,
-		OperationTime: operationTime,
-		expressionId:  expressionId,
-		result:        0,
-		isDone:        false,
-	}
-	s.tasks.tasks[task.Id] = task
-	return task
-}
-
-func isTask(arg interface{}) bool {
-	_, ok := arg.(*Task)
-	return ok
 }
 
 // GetTask выполняет получение задачи, как правило, самой старой
 func (s *Service) GetTask() (*Task, error) {
-	task, exists := s.tasks.getLast()
-	if !exists {
-		return nil, NoTaskError
+	firstLoopFlag := true
+	increase := func(flag bool) {
+		if firstLoopFlag {
+			s.tasks.mu.Lock()
+			defer s.tasks.mu.Unlock()
+			s.tasks.lastTask++
+		}
 	}
 
-	exp := s.expressions[task.expressionId]
+	for i := s.tasks.lastTask; i <= s.tasks.taskCounter; i++ {
+		task, exists := s.tasks.get(i)
 
-	// проверка выполнены ли задачи, требуемые для выполнения текущей
-	if exp.IsValid() && isTask(task.Arg1) && !task.Arg1.(*Task).isDone {
-		return nil, NoTaskError
+		if !exists || task.isDone || task.isCalculating {
+			firstLoopFlag = false
+			continue
+		}
+
+		exp := s.expressions[task.expressionId]
+
+		// проверка выполнены ли задачи, требуемые для выполнения текущей
+		if exp.IsValid() && isTask(task.Arg1) && !task.Arg1.(*Task).isDone || exp.IsValid() && isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
+			firstLoopFlag = false
+			continue
+		}
+
+		// если выражение невалидное, очистить все задачи
+		if !exp.IsValid() {
+			s.clearTasks(task, true)
+			increase(firstLoopFlag)
+			return s.GetTask()
+		}
+
+		// обработка деления на ноль
+		val, isFloat := task.Arg2.(float64)
+		if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || isFloat && val == 0) && task.Operation == "/" {
+			exp.Status = "invalid"
+			s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
+			s.clearTasks(task, true)
+			increase(firstLoopFlag)
+			return s.GetTask()
+		}
+
+		exp.Status = "calculating"
+		task.isCalculating = true
+		increase(firstLoopFlag)
+		return task, nil
 	}
-	if exp.IsValid() && isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
-		return nil, NoTaskError
-	}
 
-	defer func() {
-		s.tasks.mu.Lock()
-		defer s.tasks.mu.Unlock()
-		s.tasks.lastTask++
-	}()
-
-	// если выражение невалидное, очистить все задачи
-	if !exp.IsValid() {
-		s.clearTasks(task, true)
-		return s.GetTask()
-	}
-
-	// обработка деления на ноль
-	val, isFloat := task.Arg2.(float64)
-	if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || isFloat && val == 0) && task.Operation == "/" {
-		exp.Status = "invalid"
-		s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
-		s.clearTasks(task, true)
-		return s.GetTask()
-	}
-
-	exp.Status = "calculating"
-
-	return task, nil
+	return nil, NoTaskError
 }
 
 // SetResult выполняет прием результата обработки задачи
@@ -337,6 +319,35 @@ func (s *Service) SetResult(id int, result float64) error {
 		s.completeExpression(exp)
 	}
 	return nil
+}
+
+type taskQueue struct {
+	tasks       map[int]*Task
+	taskCounter int // Переменная, для хранения id каждого новой задачи
+	lastTask    int // Переменная, для хранения id последней выполненной задачи
+	mu          *sync.RWMutex
+}
+
+func newTaskQueue() *taskQueue {
+	return &taskQueue{
+		tasks:       make(map[int]*Task),
+		taskCounter: 0,
+		lastTask:    0,
+		mu:          &sync.RWMutex{},
+	}
+}
+
+func (q *taskQueue) get(id int) (*Task, bool) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	task, ok := q.tasks[id]
+	return task, ok
+}
+
+func (q *taskQueue) delete(id int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	delete(q.tasks, id)
 }
 
 // GetTaskResponse является основной структурой ответа для получения задачи

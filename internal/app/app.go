@@ -1,9 +1,9 @@
 package app
 
 import (
-	"goCalculatorYL/internal/router"
-	"goCalculatorYL/internal/service"
 	"net/http"
+	"orchestrator/internal/router"
+	"orchestrator/internal/service"
 )
 
 func Run(srv *service.Service) {

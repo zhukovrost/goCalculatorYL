@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/mux"
-	"goCalculatorYL/internal/service"
-	"goCalculatorYL/pkg/util"
 	"net/http"
+	"orchestrator/internal/service"
+	"orchestrator/pkg/util"
 	"strings"
 )
 

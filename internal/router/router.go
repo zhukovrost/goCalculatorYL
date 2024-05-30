@@ -3,8 +3,8 @@ package router
 import (
 	"github.com/gorilla/mux"
 
-	"goCalculatorYL/internal/handlers"
-	"goCalculatorYL/internal/service"
+	"orchestrator/internal/handlers"
+	"orchestrator/internal/service"
 )
 
 // SetupRouter настраивает router

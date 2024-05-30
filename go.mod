@@ -1,4 +1,4 @@
-module goCalculatorYL
+module orchestrator
 
 go 1.22.3
 
