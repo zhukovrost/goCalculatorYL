@@ -1,15 +1,14 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
+	"log"
 	"os"
-	"strings"
+	"strconv"
 )
 
 type Config struct {
-	Address        string `json:"address"`
+	Host           string `json:"address"`
 	Port           uint16 `json:"port"`
 	Addition       uint
 	Subtraction    uint
@@ -19,45 +18,46 @@ type Config struct {
 
 // GetAddress возвращает полный адрес
 func (c *Config) GetAddress() string {
-	return fmt.Sprintf("%s:%d", c.Address, c.Port)
-}
-
-// CustomFormatter определяет свой собственный формат вывода для логгера
-type CustomFormatter struct{}
-
-// Format форматирует запись лога с заданным форматом времени
-func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	return []byte(fmt.Sprintf("[%s] [%s] %s\n",
-		entry.Time.Format("15:04:05.0000000"), // Формат времени: часы:минуты:секунды.микросекунды
-		strings.ToUpper(entry.Level.String()),
-		entry.Message,
-	)), nil
+	return fmt.Sprintf("%s:%d", c.Host, c.Port)
 }
 
 // LoadConfig принимает порт для сервера и длительность математических операций и возвращает конфиг
-func LoadConfig(port uint16, addition, subtraction, multiplication, division uint) (*Config, error) {
-	if port <= 0 || port > 65535 {
-		return nil, errors.New("invalid port")
-	}
-
+func LoadConfig() *Config {
+	addition, subtraction, multiplication, division := loadEnv()
 	return &Config{
-		Address:        "localhost",
-		Port:           port,
+		Host:           "localhost",
+		Port:           8080,
 		Addition:       addition,
 		Subtraction:    subtraction,
 		Multiplication: multiplication,
 		Division:       division,
-	}, nil
+	}
 }
 
-func LoadLogger(debugLevel bool) *logrus.Logger {
-	log := logrus.New()
-	log.SetFormatter(&CustomFormatter{})
-	log.SetOutput(os.Stdout)
-	if debugLevel {
-		log.SetLevel(logrus.DebugLevel)
-	} else {
-		log.SetLevel(logrus.InfoLevel)
+func loadEnv() (uint, uint, uint, uint) {
+	// Загрузка значений из переменных окружения
+	addition := getEnvUint("MATH_ADDITION", 1000)
+	subtraction := getEnvUint("MATH_SUBTRACTION", 1000)
+	multiplication := getEnvUint("MATH_MULTIPLICATION", 1000)
+	division := getEnvUint("MATH_DIVISION", 1000)
+
+	return addition, subtraction, multiplication, division
+}
+
+func getEnvUint(key string, defaultValue uint) uint {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
 	}
-	return log
+
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		log.Fatalf("Invalid value for %s: %s", key, value)
+	}
+
+	if i < 0 {
+		log.Fatalf("Invalid value for %s: %s", key, value)
+	}
+
+	return uint(i)
 }

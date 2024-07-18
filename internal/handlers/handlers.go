@@ -11,10 +11,10 @@ import (
 )
 
 type OrchestratorHandler struct {
-	srv *service.Service
+	srv *service.MyService
 }
 
-func NewHandler(srv *service.Service) *OrchestratorHandler {
+func New(srv *service.MyService) *OrchestratorHandler {
 	srv.Logger.Debug("Setting up orchestrator handlers...")
 	return &OrchestratorHandler{
 		srv: srv,
@@ -113,33 +113,18 @@ func (h *OrchestratorHandler) GetTaskHandler(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
-	resp, err := h.srv.GetJSONResponse(task)
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		h.srv.Logger.Error(err.Error())
-		return
-	}
-
-	_, err = w.Write(resp)
+	_, err = w.Write(task)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error("failed to write response: " + err.Error())
 	}
-
-	h.srv.Logger.Debugf("successful response: the task %d has been taken for calculation (200)", task.Id)
-}
-
-// calculationResult является структурой получения результата вычисления задачи
-type calculationResult struct {
-	Id     int     `json:"id"`
-	Result float64 `json:"result"`
 }
 
 // SetResultHandler выполняет прием результата обработки задачи
 func (h *OrchestratorHandler) SetResultHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Debug("new POST request")
 
-	var result calculationResult
+	var result service.CalculationResult
 	err := json.NewDecoder(r.Body).Decode(&result)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -147,7 +132,7 @@ func (h *OrchestratorHandler) SetResultHandler(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	if err = h.srv.SetResult(result.Id, result.Result); err != nil {
+	if err = h.srv.SetTaskResult(result.Id, result.Result); err != nil {
 		http.Error(w, err.Error(), 404)
 		h.srv.Logger.Error(err.Error())
 		return

@@ -1,24 +1,23 @@
 package router
 
 import (
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
+	"net/http"
 
 	"orchestrator/internal/handlers"
-	"orchestrator/internal/service"
 )
 
-// SetupRouter настраивает router
-func SetupRouter(srv *service.Service) *mux.Router {
-	srv.Logger.Debug("Setting up router...")
+func SetupRouter(h *handlers.OrchestratorHandler) http.Handler {
+	r := chi.NewRouter()
 
-	r := mux.NewRouter()
-	h := handlers.NewHandler(srv)
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Post("/calculate", h.AddExpressionHandler)
+		r.Get("/expressions", h.GetExpressionsHandler)
+		r.Get("/expressions/{id}", h.GetExpressionByIdHandler)
+	})
 
-	r.HandleFunc("/api/v1/calculate", h.AddExpressionHandler).Methods("POST")
-	r.HandleFunc("/api/v1/expressions", h.GetExpressionsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/expressions/{id}", h.GetExpressionByIdHandler).Methods("GET")
-	r.HandleFunc("/internal/task", h.GetTaskHandler).Methods("GET")
-	r.HandleFunc("/internal/task", h.SetResultHandler).Methods("POST")
+	r.Get("/internal/task", h.GetTaskHandler)
+	r.Post("/internal/task", h.SetResultHandler)
 
 	return r
 }
