@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/sirupsen/logrus"
 	"orchestrator/internal/config"
+	"orchestrator/internal/models"
 )
 
 var (
@@ -25,7 +26,7 @@ type Service interface {
 type MyService struct {
 	Cfg         *config.Config
 	Logger      *logrus.Logger
-	expressions map[string]*Expression
+	expressions map[string]*models.Expression
 	tasks       *taskQueue
 }
 
@@ -33,7 +34,7 @@ func New(cfg *config.Config, logger *logrus.Logger) *MyService {
 	return &MyService{
 		Cfg:         cfg,
 		Logger:      logger,
-		expressions: make(map[string]*Expression),
+		expressions: make(map[string]*models.Expression),
 		tasks:       newTaskQueue(),
 	}
 }
@@ -62,25 +63,4 @@ type TaskResponse struct {
 type CalculationResult struct {
 	Id     int     `json:"id"`
 	Result float64 `json:"result"`
-}
-
-// Expression является выражением, которое нужно вычислить
-type Expression struct {
-	*NewExpressionRequest
-	Result   float64 `json:"result"`
-	Status   string  `json:"status"`
-	lastTask *Task
-}
-
-// Task является структурой для задач
-type Task struct {
-	Id            int
-	Arg1          interface{}
-	Arg2          interface{}
-	Operation     string
-	OperationTime uint
-	result        float64
-	expressionId  string
-	isDone        bool
-	isCalculating bool
 }

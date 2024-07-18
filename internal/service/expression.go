@@ -2,24 +2,26 @@ package service
 
 import (
 	"fmt"
+	"orchestrator/internal/models"
 )
 
-func NewExpression(exp *NewExpressionRequest) *Expression {
-	return &Expression{
-		NewExpressionRequest: exp,
-		Result:               0,
-		Status:               "pending",
+func NewExpression(exp *NewExpressionRequest) *models.Expression {
+	return &models.Expression{
+		Id:         exp.Id,
+		Expression: exp.Expression,
+		Result:     0,
+		Status:     "pending",
 	}
 }
 
-func isValid(e *Expression) bool {
+func isValid(e *models.Expression) bool {
 	return e.Status != "invalid"
 }
 
 // GetExpressions выполняет получение списка выражений
-func (s *MyService) GetExpressions() []*Expression {
+func (s *MyService) GetExpressions() []*models.Expression {
 	s.Logger.Debugf("get all expressions (%d items)", len(s.expressions))
-	var res []*Expression
+	var res []*models.Expression
 	for _, exp := range s.expressions {
 		res = append(res, exp)
 	}
@@ -27,13 +29,13 @@ func (s *MyService) GetExpressions() []*Expression {
 }
 
 // GetExpressionById выполняет получение выражения по Id
-func (s *MyService) GetExpressionById(id string) (*Expression, bool) {
+func (s *MyService) GetExpressionById(id string) (*models.Expression, bool) {
 	exp, exists := s.expressions[id]
 	return exp, exists
 }
 
 // enqueueExpression добавляет новое выражение в очередь на выполнение
-func (s *MyService) enqueueExpression(exp *Expression) error {
+func (s *MyService) enqueueExpression(exp *models.Expression) error {
 	_, exists := s.expressions[exp.Id]
 	if exists {
 		return fmt.Errorf("expression %s already exists", exp.Id)
@@ -56,17 +58,17 @@ func (s *MyService) AddExpression(req *NewExpressionRequest) error {
 	}
 
 	if s.tasks.taskCounter > 0 {
-		exp.lastTask, _ = s.tasks.get(s.tasks.taskCounter)
+		exp.LastTask, _ = s.tasks.get(s.tasks.taskCounter)
 	}
 
 	return nil
 }
 
 // completeExpression выполняет всю логику при завершении вычисления выражения
-func (s *MyService) completeExpression(exp *Expression) {
-	exp.Result = exp.lastTask.result
+func (s *MyService) completeExpression(exp *models.Expression) {
+	exp.Result = exp.LastTask.Result
 	exp.Status = "done"
-	s.clearTasks(exp.lastTask, true)
-	exp.lastTask = nil
-	s.Logger.Infof("expression (id: %s) done. result: %f", exp.Id, exp.Result)
+	s.clearTasks(exp.LastTask, true)
+	exp.LastTask = nil
+	s.Logger.Infof("expression (id: %s) done. Result: %f", exp.Id, exp.Result)
 }

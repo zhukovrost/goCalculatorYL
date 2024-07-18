@@ -3,47 +3,48 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"orchestrator/internal/models"
 	"orchestrator/pkg/util"
 	"strconv"
 	"sync"
 )
 
-func (s *MyService) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *Task {
+func (s *MyService) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *models.Task {
 	s.tasks.mu.Lock()
 	defer s.tasks.mu.Unlock()
 
 	s.tasks.taskCounter++
-	task := &Task{
+	task := &models.Task{
 		Id:            s.tasks.taskCounter,
 		Arg1:          arg1,
 		Arg2:          arg2,
 		Operation:     operation,
 		OperationTime: operationTime,
-		expressionId:  expressionId,
-		result:        0,
-		isDone:        false,
-		isCalculating: false,
+		ExpressionId:  expressionId,
+		Result:        0,
+		IsDone:        false,
+		IsCalculating: false,
 	}
 	s.tasks.tasks[task.Id] = task
 	return task
 }
 
 func isTask(arg interface{}) bool {
-	_, ok := arg.(*Task)
+	_, ok := arg.(*models.Task)
 	return ok
 }
 
 // clearTasks удаляет из памяти задачи, которые требуются для выполнения данной
-func (s *MyService) clearTasks(lastTask *Task, deleteCurrent bool) {
+func (s *MyService) clearTasks(lastTask *models.Task, deleteCurrent bool) {
 	if lastTask == nil {
 		return
 	}
 	if isTask(lastTask.Arg1) {
-		s.clearTasks(lastTask.Arg1.(*Task), true)
+		s.clearTasks(lastTask.Arg1.(*models.Task), true)
 		lastTask.Arg1 = nil
 	}
 	if isTask(lastTask.Arg1) {
-		s.clearTasks(lastTask.Arg1.(*Task), true)
+		s.clearTasks(lastTask.Arg1.(*models.Task), true)
 		lastTask.Arg2 = nil
 	}
 	if deleteCurrent {
@@ -94,7 +95,7 @@ func (s *MyService) generateTasks(expressionId string) error {
 			stack = stack[:len(stack)-2]
 			cnt++
 
-			var task *Task
+			var task *models.Task
 			switch token {
 			case "+":
 				task = s.newTask(a, b, "+", s.Cfg.Addition, expressionId)
@@ -140,15 +141,15 @@ func (s *MyService) GetTask() ([]byte, error) {
 	for i := s.tasks.lastTask; i <= s.tasks.taskCounter; i++ {
 		task, exists := s.tasks.get(i)
 
-		if !exists || task.isDone || task.isCalculating {
+		if !exists || task.IsDone || task.IsCalculating {
 			firstLoopFlag = false
 			continue
 		}
 
-		exp := s.expressions[task.expressionId]
+		exp := s.expressions[task.ExpressionId]
 
 		// проверка выполнены ли задачи, требуемые для выполнения текущей
-		if isValid(exp) && isTask(task.Arg1) && !task.Arg1.(*Task).isDone || isValid(exp) && isTask(task.Arg2) && !task.Arg2.(*Task).isDone {
+		if isValid(exp) && isTask(task.Arg1) && !task.Arg1.(*models.Task).IsDone || isValid(exp) && isTask(task.Arg2) && !task.Arg2.(*models.Task).IsDone {
 			firstLoopFlag = false
 			continue
 		}
@@ -162,7 +163,7 @@ func (s *MyService) GetTask() ([]byte, error) {
 
 		// обработка деления на ноль
 		val, isFloat := task.Arg2.(float64)
-		if (isTask(task.Arg2) && task.Arg2.(*Task).result == 0 || isFloat && val == 0) && task.Operation == "/" {
+		if (isTask(task.Arg2) && task.Arg2.(*models.Task).Result == 0 || isFloat && val == 0) && task.Operation == "/" {
 			exp.Status = "invalid"
 			s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
 			s.clearTasks(task, true)
@@ -171,7 +172,7 @@ func (s *MyService) GetTask() ([]byte, error) {
 		}
 
 		exp.Status = "calculating"
-		task.isCalculating = true
+		task.IsCalculating = true
 		increase(firstLoopFlag)
 
 		return s.getJSONResponse(task)
@@ -180,27 +181,27 @@ func (s *MyService) GetTask() ([]byte, error) {
 	return nil, NoTaskError
 }
 
-// SetResult выполняет прием результата обработки задачи
+// SetTaskResult выполняет прием результата обработки задачи
 func (s *MyService) SetTaskResult(id int, result float64) error {
 	task, exists := s.tasks.get(id)
 	if !exists {
 		return fmt.Errorf("expression %d not found. probably, the expression is invalid", id)
 	}
-	task.result = result
-	task.isDone = true
+	task.Result = result
+	task.IsDone = true
 
-	exp := s.expressions[task.expressionId]
-	s.Logger.Infof("task (id: %d) done. result: %f", id, result)
+	exp := s.expressions[task.ExpressionId]
+	s.Logger.Infof("task (id: %d) done. Result: %f", id, result)
 
 	// проверка на выполнение всего выражения
-	if lastTaskId := exp.lastTask.Id; lastTaskId == task.Id {
+	if lastTaskId := exp.LastTask.Id; lastTaskId == task.Id {
 		s.completeExpression(exp)
 	}
 	return nil
 }
 
 type taskQueue struct {
-	tasks       map[int]*Task
+	tasks       map[int]*models.Task
 	taskCounter int // Переменная, для хранения id каждого новой задачи
 	lastTask    int // Переменная, для хранения id последней выполненной задачи
 	mu          *sync.RWMutex
@@ -208,14 +209,14 @@ type taskQueue struct {
 
 func newTaskQueue() *taskQueue {
 	return &taskQueue{
-		tasks:       make(map[int]*Task),
+		tasks:       make(map[int]*models.Task),
 		taskCounter: 0,
 		lastTask:    0,
 		mu:          &sync.RWMutex{},
 	}
 }
 
-func (q *taskQueue) get(id int) (*Task, bool) {
+func (q *taskQueue) get(id int) (*models.Task, bool) {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 	task, ok := q.tasks[id]
@@ -229,17 +230,17 @@ func (q *taskQueue) delete(id int) {
 }
 
 // fillResponse обрабатывает задачу, которую нужно выдать как ответ
-func (s *MyService) fillResponse(task *Task) *TaskResponse {
+func (s *MyService) fillResponse(task *models.Task) *TaskResponse {
 	var arg1, arg2 float64
 
 	if isTask(task.Arg1) {
-		arg1 = task.Arg1.(*Task).result
+		arg1 = task.Arg1.(*models.Task).Result
 	} else {
 		arg1 = task.Arg1.(float64)
 	}
 
 	if isTask(task.Arg2) {
-		arg2 = task.Arg2.(*Task).result
+		arg2 = task.Arg2.(*models.Task).Result
 	} else {
 		arg2 = task.Arg2.(float64)
 	}
@@ -256,7 +257,7 @@ func (s *MyService) fillResponse(task *Task) *TaskResponse {
 }
 
 // getJSONResponse возвращается json получаемой задачи
-func (s *MyService) getJSONResponse(t *Task) ([]byte, error) {
+func (s *MyService) getJSONResponse(t *models.Task) ([]byte, error) {
 	resp := &GetTaskResponse{
 		Task: s.fillResponse(t),
 	}
