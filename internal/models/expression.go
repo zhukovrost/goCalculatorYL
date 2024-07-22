@@ -6,5 +6,6 @@ type Expression struct {
 	Expression string  `json:"expression"`
 	Result     float64 `json:"result"`
 	Status     string  `json:"status"`
-	LastTask   *Task
+	Creator    int64   `json:"creator"`
+	LastTask   *Task   `json:"-"`
 }

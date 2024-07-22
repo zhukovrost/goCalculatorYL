@@ -5,12 +5,13 @@ import (
 	"orchestrator/internal/models"
 )
 
-func NewExpression(exp *NewExpressionRequest) *models.Expression {
+func NewExpression(exp *NewExpressionRequest, creator int64) *models.Expression {
 	return &models.Expression{
 		Id:         exp.Id,
 		Expression: exp.Expression,
 		Result:     0,
 		Status:     "pending",
+		Creator:    creator,
 	}
 }
 
@@ -19,18 +20,25 @@ func isValid(e *models.Expression) bool {
 }
 
 // GetExpressions выполняет получение списка выражений
-func (s *MyService) GetExpressions() []*models.Expression {
+func (s *MyService) GetExpressions(creator int64) []*models.Expression {
 	s.Logger.Debugf("get all expressions (%d items)", len(s.expressions))
 	var res []*models.Expression
 	for _, exp := range s.expressions {
-		res = append(res, exp)
+		if exp.Creator == creator {
+			res = append(res, exp)
+		}
 	}
 	return res
 }
 
 // GetExpressionById выполняет получение выражения по Id
-func (s *MyService) GetExpressionById(id string) (*models.Expression, bool) {
+func (s *MyService) GetExpressionById(id string, creator int64) (*models.Expression, bool) {
 	exp, exists := s.expressions[id]
+	if !exists {
+		return nil, false
+	} else if exp.Creator == creator {
+		return nil, false
+	}
 	return exp, exists
 }
 
@@ -45,8 +53,8 @@ func (s *MyService) enqueueExpression(exp *models.Expression) error {
 }
 
 // AddExpression выполняет добавление вычисления арифметического выражения
-func (s *MyService) AddExpression(req *NewExpressionRequest) error {
-	exp := NewExpression(req)
+func (s *MyService) AddExpression(req *NewExpressionRequest, creator int64) error {
+	exp := NewExpression(req, creator)
 	err := s.enqueueExpression(exp)
 	if err != nil {
 		return err

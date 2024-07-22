@@ -14,6 +14,7 @@ type Config struct {
 	Subtraction    uint
 	Multiplication uint
 	Division       uint
+	secret         string
 }
 
 // GetAddress возвращает полный адрес
@@ -31,6 +32,7 @@ func LoadConfig() *Config {
 		Subtraction:    subtraction,
 		Multiplication: multiplication,
 		Division:       division,
+		secret:         LoadSecret(),
 	}
 }
 
@@ -60,4 +62,16 @@ func getEnvUint(key string, defaultValue uint) uint {
 	}
 
 	return uint(i)
+}
+
+func LoadSecret() string {
+	secret := os.Getenv("SECRET_KEY")
+	if secret == "" {
+		return "secret_key"
+	}
+	return secret
+}
+
+func (c *Config) GetSecret() string {
+	return c.secret
 }

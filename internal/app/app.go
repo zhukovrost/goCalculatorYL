@@ -7,11 +7,22 @@ import (
 	"orchestrator/internal/router"
 	"orchestrator/internal/service"
 	"orchestrator/pkg/logger"
+	"orchestrator/pkg/sqlite"
 )
 
 func Run(cfg *config.Config) {
 	log := logger.New(true)
-	srv := service.New(cfg, log)
+	log.Info("Starting orchestrator...")
+
+	db, err := sqlite.Open()
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %s\n", err.Error())
+		return
+	}
+
+	defer db.Close()
+
+	srv := service.New(cfg, db, log)
 	handler := handlers.New(srv)
 
 	// Настройка маршрутизатора

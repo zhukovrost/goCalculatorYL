@@ -1,14 +1,17 @@
 package service
 
 import (
+	"database/sql"
 	"errors"
 	"github.com/sirupsen/logrus"
 	"orchestrator/internal/config"
 	"orchestrator/internal/models"
+	"orchestrator/internal/repo"
 )
 
 var (
-	NoTaskError = errors.New("no task")
+	NoTaskError         = errors.New("no task")
+	InvalidCreditsError = errors.New("invalid credits")
 )
 
 /*
@@ -25,16 +28,20 @@ type Service interface {
 
 type MyService struct {
 	Cfg         *config.Config
+	DB          *sql.DB
 	Logger      *logrus.Logger
+	repos       *repo.Repos
 	expressions map[string]*models.Expression
 	tasks       *taskQueue
 }
 
-func New(cfg *config.Config, logger *logrus.Logger) *MyService {
+func New(cfg *config.Config, db *sql.DB, logger *logrus.Logger) *MyService {
 	return &MyService{
 		Cfg:         cfg,
 		Logger:      logger,
+		DB:          db,
 		expressions: make(map[string]*models.Expression),
+		repos:       repo.NewRepos(db),
 		tasks:       newTaskQueue(),
 	}
 }
@@ -63,4 +70,9 @@ type TaskResponse struct {
 type CalculationResult struct {
 	Id     int     `json:"id"`
 	Result float64 `json:"result"`
+}
+
+type UserInput struct {
+	Login    string `json:"login"`
+	Password string `json:"password"`
 }

@@ -3,7 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"orchestrator/internal/service"
 	"orchestrator/pkg/util"
@@ -43,7 +43,9 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 		calculationRequest.Id = util.GenerateId()
 	}
 
-	if err = h.srv.AddExpression(&calculationRequest); err != nil {
+	creator := int64(r.Context().Value("user").(float64))
+
+	if err = h.srv.AddExpression(&calculationRequest, creator); err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		h.srv.Logger.Error(err.Error())
 		return
@@ -59,7 +61,8 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 // GetExpressionsHandler выполняет получение списка всех выражений
 func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Debug("new GET request")
-	expressions := h.srv.GetExpressions()
+	creator := int64(r.Context().Value("user").(float64))
+	expressions := h.srv.GetExpressions(creator)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
@@ -75,10 +78,10 @@ func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *ht
 // GetExpressionByIdHandler выполняет получение выражения по Id
 func (h *OrchestratorHandler) GetExpressionByIdHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Println("new GET request")
-	vars := mux.Vars(r)
-	id := vars["id"]
+	id := chi.URLParam(r, "id")
 
-	expression, exists := h.srv.GetExpressionById(id)
+	creator := int64(r.Context().Value("user").(float64))
+	expression, exists := h.srv.GetExpressionById(id, creator)
 	if !exists {
 		http.Error(w, "Expression not found", 404)
 		h.srv.Logger.Errorf("Expression not found: %s", id)
@@ -140,4 +143,59 @@ func (h *OrchestratorHandler) SetResultHandler(w http.ResponseWriter, r *http.Re
 
 	w.WriteHeader(200)
 	h.srv.Logger.Debug("successful response (200)")
+}
+
+func (h *OrchestratorHandler) Register(w http.ResponseWriter, r *http.Request) {
+	h.srv.Logger.Debug("new POST request")
+
+	var input service.UserInput
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	err = h.srv.Register(input)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	w.WriteHeader(200)
+	h.srv.Logger.Debug("successful response (200)")
+}
+
+func (h *OrchestratorHandler) Login(w http.ResponseWriter, r *http.Request) {
+	h.srv.Logger.Debug("new POST request")
+
+	var input service.UserInput
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	token, err := h.srv.Login(input)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, service.InvalidCreditsError):
+			http.Error(w, err.Error(), http.StatusNotFound)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		h.srv.Logger.Error(err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "plain/text")
+	w.WriteHeader(200)
+
+	if _, err = w.Write([]byte(token + "\n")); err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error("failed to write response: " + err.Error())
+	}
 }
