@@ -1,6 +1,6 @@
 # Распределенный вычислитель арифметических выражений (оркестратор)
 
-Финальное задание по второму спринту Яндекс Лицея (GoLang)
+Финальное задание курса по GoLang Яндекс Лицея
 
 Этот сервис принимает на вход арифметические выражения и разбивает их на задачи. 
 Другой сервис (*агент*) запрашивает у оркестратора эти задачи, считает их, возвращает результат. 
@@ -46,67 +46,111 @@ go run cmd/orchestrator/main.go
 
 ## Настройка (при необходимости)
 
-Вы можете поменять время выполнения арифметических операций и отображение логов уровня debug.
-Для этого можно поменять значения флагов. Например:
+Вы можете поменять время выполнения арифметических операций.
+Для этого можете поменять значения переменных окружения:
+
+- MATH_ADDITION
+- MATH_SUBTRACTION
+- MATH_MULTIPLICATION
+- MATH_DIVISION
+
+Вот пример запуска с определёнными настройками:
 
 ```sh
-go run cmd/orchestrator/main.go -add=3000 -div=1000000 -debug
-```
-
-Подробнее про это:
-
-```sh
-go run cmd/orchestrator/main.go --help
+MATH_ADDITION=7000 MATH_SUBTRACTION=200 go run cmd/orchestrator/main.go
 ```
 
 ## Инструкция по использованию
 
-### 1. Добавление арифметического выражения
+### 1. Регистрация
+
+Для доступа к большинству функций вам потребуется регистрация.
+Код ответа будет **200** в случае успешной регистрации. **500** в противном случае.
+
+```sh
+ curl http://localhost:8080/api/v1/register \
+ --header 'Content-Type: application/json' \
+ --data '{
+   "login": "student_yandex",
+   "password": "password"
+ }'
+ ```
+
+### 2. Аутентификация
+
+Код ответа будет **200** в случае успешной регистрации. **500** или **404** в противном случае.
+В ответе будет JWT токен, который будет работать в течение 15 минут.
+```sh
+curl http://localhost:8080/api/v1/login \
+--header 'Content-Type: application/json' \
+--data '{
+ "login": "student_yandex",
+ "password": "password"
+}'
+```
+
+Ответ:
+```json
+{
+  "token": "<токен>"
+}
+```
+
+Для дальнейшего удобства объявим переменную окружения TOKEN:
+
+```sh 
+export TOKEN="<токен>"
+```
+
+Все последующие endpoint'ы (кроме тех, которые связаны с задачами) требуют наличие точена в хедере:
+
+```
+Authorization: Bearer $TOKEN
+```
+
+### 3. Добавление арифметического выражения
 
 * Правильное выражение:
 
-   Код ответа будет **201**. Также выражение добавится в очередь и будет иметь статус *pending*.
+   Код ответа будет **201**. Также выражение добавится в очередь и будет иметь статус *pending*. Подобный запрос будет возвращать id выражения.
    ```sh
    curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
-   --data '{
-     "id": "validExpression1",
-     "expression": "2 + 2 * 2"
-   }'
-   ```
-  
-   Если у выражения не задан id, то он будет сгенерирован.
-   ```sh
-   curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
+   --header "Content-Type: application/json" \
+   --header "Authorization: Bearer $TOKEN" \
    --data '{
      "expression": "100 - 5 * (40 - 23) + 3"
    }'
    ```
+  Ответ:
+  ```json
+  {
+    "id": 1
+  }
+  ```
 
 * Выражение с ошибкой (деление на ноль):
 
   Код ответа будет **422**. Также выражение добавится в очередь и будет иметь статус *invalid*.
-   ```sh
-   curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
-   --data '{
-     "id": "invalidExpression1",
-     "expression": "4/0 + 1"
-   }'
-   ```
+  ```sh
+  curl http://localhost:8080/api/v1/calculate \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer $TOKEN" \
+  --data '{
+   "expression": "4/0 + 1"
+  }'
+  ```
 
    Но если добавить выражение, сразу по которому не скажешь, что там есть деление на ноль, то 
 код ответа будет **201**. Также выражение добавится в очередь и будет иметь статус *pending*.
 В процессе подсчёта выражения будет выявлена ошибка, и статус выражения обновится на *invalid*.
-   ```sh
-   curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
-   --data '{
-     "id": "invalidExpression2",
-     "expression": "4/(3 - 3) + 90"
-   }'
-   ```
+  ```sh
+  curl http://localhost:8080/api/v1/calculate \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer $TOKEN" \
+  --data '{
+   "expression": "4/(3 - 3) + 90"
+  }'
+  ```
 
 * Выражение с ошибкой (некорректные входные данные):
 
@@ -122,84 +166,58 @@ go run cmd/orchestrator/main.go --help
 * Выражение не содержит выражения:
 
   Код ответа будет **500**. Также выражение не добавится в очередь.
-   ```sh
-   curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
-   --data '{
-     "id": "invalidExpression3",
-     "expression": {"notExpression": true}
-   }'
-   ```   
-  
-* Выражение уже существует:
+  ```sh
+  curl http://localhost:8080/api/v1/calculate \
+  --header "Content-Type: application/json" \
+  --header "Authorization: Bearer $TOKEN" \
+  --data '{
+   "expression": {"notExpression": true}
+  }'
+  ```
 
-   Код ответа будет **422**. Также выражение не добавится в очередь.
-
-   ```sh
-   curl http://localhost:8080/api/v1/calculate \
-   --header 'Content-Type: application/json' \
-   --data '{
-     "id": "validExpression1",
-     "expression": "2 + 2"
-   }'
-   ```
-
-### 2. Получение всех арифметических выражений
+### 4. Получение всех арифметических выражений
 
 ```sh 
-curl http://localhost:8080/api/v1/expressions
+curl http://localhost:8080/api/v1/expressions \
+--header "Authorization: Bearer $TOKEN"
 ```
 
 Код ответа **200**. Ответом будет:
 ```json
-[
-   {
-      "id":"invalidExpression1",
-      "expression":"4/0 + 1",
-      "result":0,
-      "status":"invalid"
-   },
-   {
-      "id":"invalidExpression2",
-      "expression":"4/(3 - 3) + 90",
-      "result":0,
-      "status":"pending"
-   },
-   {
-      "id":"validExpression1",
-      "expression":"2 + 2 * 2",
-      "result":0,
-      "status":"pending"
-   },
-   {
-      "id":"605702",
-      "expression":"100 - 5 * (40 - 23) + 3",
-      "result":0,
-      "status":"pending"
-   }
-]
-
+{
+  "expressions": [
+    {
+      "id": 1,
+      "expression": "100 - 5 * (40 - 23) + 3",
+      "result": 0,
+      "status": "pending"
+    }
+  ]
+}
 ```
 
-### 3. Получение арифметических выражений по ID
+### 5. Получение арифметических выражений по ID
 
-Дан пример получения выражения с ID **validExpression1**. Код ответа будет **200**:
+Дан пример получения выражения по ID. Код ответа будет **200**:
 ```sh
-curl http://localhost:8080/api/v1/expressions/validExpression1
+curl http://localhost:8080/api/v1/expressions/1 \
+--header "Authorization: Bearer $TOKEN"
 ```
 И ответ:
 ```json
 {
-   "id":"validExpression1",
-   "expression":"2 + 2 * 2",
-   "result":0,
-   "status":"pending"
+  "expression": {
+    "id": 1,
+    "expression": "100 - 5 * (40 - 23) + 3",
+    "result": 0,
+    "status": "pending"
+  }
 }
 ```
 
 Если запросить несуществующее выражение код ответа будет **404**. 
 
-### 4. Получение задачи
+### 6. Получение задачи
 
 С данной функцией работает **агент**. Он постоянно запрашивает задачу. Если их нет, то получает код **404**. 
 Если есть, то код **200** и ответ.
@@ -224,42 +242,16 @@ curl http://localhost:8080/internal/task
 }
 ```
 
-### 5. Установить результат задачи
+### 7. Установить результат задачи
 
 С данной функцией работает **агент**. Он постоянно решает задачу и отправляет результат обратно. 
 Если нет задачи с данным id, то получает код **404**. Если есть, то код **200** и ответ, при условии, что данные result валидны, иначе **422**.
 
 ```sh
 curl http://localhost:8080/internal/task \
---header 'Content-Type: application/json' \
+--header "Content-Type: application/json" \
 --data '{
   "id": 0,
   "result": 4
 }'
-```
-
-## Структура проекта
-
-```
-orchestratorYL/
-├── cmd/
-│   └── orchestrator/
-│       └── main.go
-├── internal/
-│   ├── app/
-│   │   └── app.go
-│   ├── config/
-│   │   └── config.go
-│   ├── handler/
-│   │   └── handler.go
-│   ├── router/
-│   │   └── router.go
-│   └── service/
-│       └── service.go
-├── pkg/
-│   └── utils/
-│       └── utils.go
-├── .gitignore
-├── go.mod
-└── README.md
 ```

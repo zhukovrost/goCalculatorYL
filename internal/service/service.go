@@ -31,24 +31,36 @@ type MyService struct {
 	DB          *sql.DB
 	Logger      *logrus.Logger
 	repos       *repo.Repos
-	expressions map[string]*models.Expression
+	expressions map[int]*models.Expression
 	tasks       *taskQueue
+	LastId      int
 }
 
-func New(cfg *config.Config, db *sql.DB, logger *logrus.Logger) *MyService {
-	return &MyService{
+func New(cfg *config.Config, db *sql.DB, logger *logrus.Logger) (*MyService, error) {
+	repos := repo.NewRepos(db)
+	srv := &MyService{
 		Cfg:         cfg,
 		Logger:      logger,
 		DB:          db,
-		expressions: make(map[string]*models.Expression),
-		repos:       repo.NewRepos(db),
+		expressions: make(map[int]*models.Expression),
+		repos:       repos,
 		tasks:       newTaskQueue(),
 	}
+
+	exps, last, err := repos.Expression.GetAll()
+
+	if err != nil {
+		return srv, err
+	}
+
+	srv.expressions = exps
+	srv.LastId = last
+
+	return srv, nil
 }
 
 // NewExpressionRequest является входными данными при приёме нового выражения
 type NewExpressionRequest struct {
-	Id         string `json:"id"`
 	Expression string `json:"expression"`
 }
 

@@ -8,7 +8,7 @@ type Task struct {
 	Operation     string
 	OperationTime uint
 	Result        float64
-	ExpressionId  string
+	ExpressionId  int
 	IsDone        bool
 	IsCalculating bool
 }

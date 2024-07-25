@@ -22,7 +22,10 @@ func Run(cfg *config.Config) {
 
 	defer db.Close()
 
-	srv := service.New(cfg, db, log)
+	srv, _ := service.New(cfg, db, log)
+	if err := srv.LoadTasks(); err != nil {
+		log.Error("Failed to load tasks from db")
+	}
 	handler := handlers.New(srv)
 
 	// Настройка маршрутизатора

@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-func (s *MyService) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId string) *models.Task {
+func (s *MyService) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId int) *models.Task {
 	s.tasks.mu.Lock()
 	defer s.tasks.mu.Unlock()
 
@@ -54,14 +54,16 @@ func (s *MyService) clearTasks(lastTask *models.Task, deleteCurrent bool) {
 }
 
 // generateTasks преобразует выражение в ряд задач
-func (s *MyService) generateTasks(expressionId string) error {
+func (s *MyService) generateTasks(expressionId int) error {
 	s.Logger.Debug("generating tasks")
 
 	exp := s.expressions[expressionId]
 	postfix, err := util.ToPostfix(exp.Expression) // получение постфикса (обратная польская запись)
 
 	if err != nil {
-		exp.Status = "invalid"
+		if err := s.invalidate(exp); err != nil {
+			return err
+		}
 		return err
 	}
 
@@ -86,7 +88,9 @@ func (s *MyService) generateTasks(expressionId string) error {
 			stack = append(stack, operand)
 		} else {
 			if len(stack) < 2 {
-				exp.Status = "invalid"
+				if err := s.invalidate(exp); err != nil {
+					return err
+				}
 				return fmt.Errorf("invalid postfix expression")
 			}
 
@@ -105,13 +109,17 @@ func (s *MyService) generateTasks(expressionId string) error {
 				task = s.newTask(a, b, "*", s.Cfg.Multiplication, expressionId)
 			case "/":
 				if !isTask(b) && b.(float64) == 0 {
-					exp.Status = "invalid"
+					if err := s.invalidate(exp); err != nil {
+						return err
+					}
 					s.Logger.Errorf("expression %v is invalid", exp.Id)
 					return fmt.Errorf("division by zero")
 				}
 				task = s.newTask(a, b, "/", s.Cfg.Division, expressionId)
 			default:
-				exp.Status = "invalid"
+				if err := s.invalidate(exp); err != nil {
+					return err
+				}
 				return fmt.Errorf("invalid operator: %s", token)
 			}
 			stack = append(stack, task)
@@ -119,7 +127,9 @@ func (s *MyService) generateTasks(expressionId string) error {
 	}
 
 	if len(stack) != 1 {
-		exp.Status = "invalid"
+		if err := s.invalidate(exp); err != nil {
+			return err
+		}
 		return fmt.Errorf("invalid postfix expression")
 	}
 
@@ -164,7 +174,9 @@ func (s *MyService) GetTask() ([]byte, error) {
 		// обработка деления на ноль
 		val, isFloat := task.Arg2.(float64)
 		if (isTask(task.Arg2) && task.Arg2.(*models.Task).Result == 0 || isFloat && val == 0) && task.Operation == "/" {
-			exp.Status = "invalid"
+			if err := s.invalidate(exp); err != nil {
+				return nil, err
+			}
 			s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
 			s.clearTasks(task, true)
 			increase(firstLoopFlag)
@@ -195,7 +207,7 @@ func (s *MyService) SetTaskResult(id int, result float64) error {
 
 	// проверка на выполнение всего выражения
 	if lastTaskId := exp.LastTask.Id; lastTaskId == task.Id {
-		s.completeExpression(exp)
+		return s.completeExpression(exp)
 	}
 	return nil
 }
@@ -267,4 +279,19 @@ func (s *MyService) getJSONResponse(t *models.Task) ([]byte, error) {
 	}
 
 	return jsonData, nil
+}
+
+func (s *MyService) LoadTasks() error {
+	for _, exp := range s.expressions {
+		if exp.Status == "pending" {
+			if err := s.generateTasks(exp.Id); err != nil {
+				return err
+			}
+			if s.tasks.taskCounter > 0 {
+				exp.LastTask, _ = s.tasks.get(s.tasks.taskCounter)
+			}
+		}
+	}
+
+	return nil
 }

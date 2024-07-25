@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"orchestrator/internal/config"
@@ -60,7 +59,6 @@ func Authenticate(next http.Handler) http.Handler {
 func RequireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userId := r.Context().Value("user")
-		fmt.Println(userId)
 		if userId == 0 {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte("authorization needed\n"))

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"github.com/go-chi/chi/v5"
 	"net/http"
+	"orchestrator/internal/models"
 	"orchestrator/internal/service"
-	"orchestrator/pkg/util"
-	"strings"
+	"strconv"
 )
 
 type OrchestratorHandler struct {
@@ -38,11 +38,6 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	calculationRequest.Id = strings.TrimSpace(calculationRequest.Id)
-	if calculationRequest.Id == "" {
-		calculationRequest.Id = util.GenerateId()
-	}
-
 	creator := int64(r.Context().Value("user").(float64))
 
 	if err = h.srv.AddExpression(&calculationRequest, creator); err != nil {
@@ -54,8 +49,15 @@ func (h *OrchestratorHandler) AddExpressionHandler(w http.ResponseWriter, r *htt
 	// Формирование ответа
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-
 	h.srv.Logger.Debug("successful response (201)")
+
+	resp := map[string]int{"id": h.srv.LastId}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), 500)
+		h.srv.Logger.Error(err.Error())
+		return
+	}
 }
 
 // GetExpressionsHandler выполняет получение списка всех выражений
@@ -67,7 +69,9 @@ func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *ht
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
-	if err := json.NewEncoder(w).Encode(expressions); err != nil {
+	resp := map[string][]*models.Expression{"expressions": expressions}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error(err.Error())
 		return
@@ -78,20 +82,27 @@ func (h *OrchestratorHandler) GetExpressionsHandler(w http.ResponseWriter, r *ht
 // GetExpressionByIdHandler выполняет получение выражения по Id
 func (h *OrchestratorHandler) GetExpressionByIdHandler(w http.ResponseWriter, r *http.Request) {
 	h.srv.Logger.Println("new GET request")
-	id := chi.URLParam(r, "id")
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Server error", 500)
+		return
+	}
 
 	creator := int64(r.Context().Value("user").(float64))
 	expression, exists := h.srv.GetExpressionById(id, creator)
 	if !exists {
 		http.Error(w, "Expression not found", 404)
-		h.srv.Logger.Errorf("Expression not found: %s", id)
+		h.srv.Logger.Errorf("Expression not found: %d", id)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
-	if err := json.NewEncoder(w).Encode(expression); err != nil {
+	resp := map[string]*models.Expression{"expression": expression}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error(err.Error())
 		return
@@ -191,10 +202,16 @@ func (h *OrchestratorHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "plain/text")
+	tokenJSON, err := json.Marshal(map[string]string{"token": token})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.srv.Logger.Error(err.Error())
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
-	if _, err = w.Write([]byte(token + "\n")); err != nil {
+	if _, err = w.Write(tokenJSON); err != nil {
 		http.Error(w, err.Error(), 500)
 		h.srv.Logger.Error("failed to write response: " + err.Error())
 	}
