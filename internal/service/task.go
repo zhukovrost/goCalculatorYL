@@ -9,6 +9,81 @@ import (
 	"sync"
 )
 
+// GetTask выполняет получение задачи, как правило, самой старой
+func (s *MyService) GetTask() ([]byte, error) {
+	firstLoopFlag := true
+	increase := func(flag bool) {
+		if firstLoopFlag {
+			s.tasks.mu.Lock()
+			defer s.tasks.mu.Unlock()
+			s.tasks.lastTask++
+		}
+	}
+
+	for i := s.tasks.lastTask; i <= s.tasks.taskCounter; i++ {
+		task, exists := s.tasks.get(i)
+
+		if !exists || task.IsDone || task.IsCalculating {
+			firstLoopFlag = false
+			continue
+		}
+
+		exp := s.expressions[task.ExpressionId]
+
+		// проверка выполнены ли задачи, требуемые для выполнения текущей
+		if isValid(exp) && isTask(task.Arg1) && !task.Arg1.(*models.Task).IsDone || isValid(exp) && isTask(task.Arg2) && !task.Arg2.(*models.Task).IsDone {
+			firstLoopFlag = false
+			continue
+		}
+
+		// если выражение невалидное, очистить все задачи
+		if !isValid(exp) {
+			s.clearTasks(task, true)
+			increase(firstLoopFlag)
+			return s.GetTask()
+		}
+
+		// обработка деления на ноль
+		val, isFloat := task.Arg2.(float64)
+		if (isTask(task.Arg2) && task.Arg2.(*models.Task).Result == 0 || isFloat && val == 0) && task.Operation == "/" {
+			if err := s.invalidate(exp); err != nil {
+				return nil, err
+			}
+			s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
+			s.clearTasks(task, true)
+			increase(firstLoopFlag)
+			return s.GetTask()
+		}
+
+		exp.Status = "calculating"
+		task.IsCalculating = true
+		increase(firstLoopFlag)
+
+		return s.getJSONResponse(task)
+	}
+
+	return nil, NoTaskError
+}
+
+// SetTaskResult выполняет прием результата обработки задачи
+func (s *MyService) SetTaskResult(id int, result float64) error {
+	task, exists := s.tasks.get(id)
+	if !exists {
+		return fmt.Errorf("expression %d not found. probably, the expression is invalid", id)
+	}
+	task.Result = result
+	task.IsDone = true
+
+	exp := s.expressions[task.ExpressionId]
+	s.Logger.Infof("task (id: %d) done. Result: %f", id, result)
+
+	// проверка на выполнение всего выражения
+	if lastTaskId := exp.LastTask.Id; lastTaskId == task.Id {
+		return s.completeExpression(exp)
+	}
+	return nil
+}
+
 func (s *MyService) newTask(arg1, arg2 interface{}, operation string, operationTime uint, expressionId int) *models.Task {
 	s.tasks.mu.Lock()
 	defer s.tasks.mu.Unlock()
@@ -134,81 +209,6 @@ func (s *MyService) generateTasks(expressionId int) error {
 	}
 
 	s.Logger.Infof("successfully created %d tasks", cnt)
-	return nil
-}
-
-// GetTask выполняет получение задачи, как правило, самой старой
-func (s *MyService) GetTask() ([]byte, error) {
-	firstLoopFlag := true
-	increase := func(flag bool) {
-		if firstLoopFlag {
-			s.tasks.mu.Lock()
-			defer s.tasks.mu.Unlock()
-			s.tasks.lastTask++
-		}
-	}
-
-	for i := s.tasks.lastTask; i <= s.tasks.taskCounter; i++ {
-		task, exists := s.tasks.get(i)
-
-		if !exists || task.IsDone || task.IsCalculating {
-			firstLoopFlag = false
-			continue
-		}
-
-		exp := s.expressions[task.ExpressionId]
-
-		// проверка выполнены ли задачи, требуемые для выполнения текущей
-		if isValid(exp) && isTask(task.Arg1) && !task.Arg1.(*models.Task).IsDone || isValid(exp) && isTask(task.Arg2) && !task.Arg2.(*models.Task).IsDone {
-			firstLoopFlag = false
-			continue
-		}
-
-		// если выражение невалидное, очистить все задачи
-		if !isValid(exp) {
-			s.clearTasks(task, true)
-			increase(firstLoopFlag)
-			return s.GetTask()
-		}
-
-		// обработка деления на ноль
-		val, isFloat := task.Arg2.(float64)
-		if (isTask(task.Arg2) && task.Arg2.(*models.Task).Result == 0 || isFloat && val == 0) && task.Operation == "/" {
-			if err := s.invalidate(exp); err != nil {
-				return nil, err
-			}
-			s.Logger.Errorf("expression %v is invalid: division by zero", exp.Id)
-			s.clearTasks(task, true)
-			increase(firstLoopFlag)
-			return s.GetTask()
-		}
-
-		exp.Status = "calculating"
-		task.IsCalculating = true
-		increase(firstLoopFlag)
-
-		return s.getJSONResponse(task)
-	}
-
-	return nil, NoTaskError
-}
-
-// SetTaskResult выполняет прием результата обработки задачи
-func (s *MyService) SetTaskResult(id int, result float64) error {
-	task, exists := s.tasks.get(id)
-	if !exists {
-		return fmt.Errorf("expression %d not found. probably, the expression is invalid", id)
-	}
-	task.Result = result
-	task.IsDone = true
-
-	exp := s.expressions[task.ExpressionId]
-	s.Logger.Infof("task (id: %d) done. Result: %f", id, result)
-
-	// проверка на выполнение всего выражения
-	if lastTaskId := exp.LastTask.Id; lastTaskId == task.Id {
-		return s.completeExpression(exp)
-	}
 	return nil
 }
 
